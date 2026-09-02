@@ -21,6 +21,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -71,6 +72,19 @@ class BffSegurancaTest {
     }
 
     @Test
+    void api_comSessaoAutenticada_retornaGerenteId() throws Exception {
+        // Regressao: o controller resolvia o OidcUser por injecao implicita de parametro (sem
+        // @AuthenticationPrincipal), o que o MVC trata como model attribute a construir por
+        // data binding -- IllegalStateException em runtime, nunca coberta pelo 401 do teste
+        // acima nem pelos testes de login/logout, que nao chegam a chamar usuario.getSubject().
+        mockMvc.perform(get("/api/sessao")
+                        .with(SecurityMockMvcRequestPostProcessors.oidcLogin()
+                                .idToken(token -> token.subject("gerente.a"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gerenteId").value("gerente.a"));
+    }
+
+    @Test
     void logout_semTokenCsrf_eRecusado() throws Exception {
         mockMvc.perform(post("/logout")
                         .with(SecurityMockMvcRequestPostProcessors.user("gerente.a")))
@@ -105,6 +119,18 @@ class BffSegurancaTest {
         try (var conexao = redisConnectionFactory.getConnection()) {
             assertThat(conexao.ping()).isEqualTo("PONG");
         }
+    }
+
+    @Test
+    void requisicaoQualquer_emiteCookieXsrfToken() throws Exception {
+        // Regressao: CsrfFilter resolve o token via Supplier adiado -- sem algo que force essa
+        // resolucao, o cookie XSRF-TOKEN nunca e escrito numa API pura (sem view server-side
+        // lendo "_csrf"), e a SPA fica sem meio legitimo de obter o token para POST /logout.
+        MvcResult resultado = mockMvc.perform(get("/actuator/health")).andReturn();
+
+        String setCookie = resultado.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        assertThat(setCookie).isNotNull();
+        assertThat(setCookie).contains("XSRF-TOKEN=");
     }
 
     @Test

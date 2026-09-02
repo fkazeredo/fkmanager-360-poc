@@ -1,5 +1,9 @@
 package com.fkmanager360.bffgerente.seguranca;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -11,9 +15,14 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
 
 /**
  * bff-gerente e OAuth2 confidential client conduzindo Authorization Code + PKCE + OIDC contra
@@ -49,9 +58,28 @@ public class SegurancaConfig {
                         // Convencao do Angular: le o cookie XSRF-TOKEN (nao HttpOnly, para o JS
                         // conseguir ler) e devolve como header X-XSRF-TOKEN.
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()));
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+                // O CsrfFilter resolve o token so sob demanda (Supplier adiado, para nao pagar o
+                // custo em toda requisicao). Numa API pura, sem view server-side que leia "_csrf",
+                // essa resolucao nunca aconteceria e o cookie XSRF-TOKEN nunca seria escrito --
+                // deixando a SPA sem meio legitimo de completar POST /logout. Este filtro forca a
+                // resolucao em toda requisicao, exatamente como a documentacao do Spring Security
+                // recomenda para SPAs.
+                .addFilterAfter(new ForcarResolucaoCsrfFilter(), BasicAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    private static final class ForcarResolucaoCsrfFilter extends OncePerRequestFilter {
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+                throws ServletException, IOException {
+            CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+            if (csrfToken != null) {
+                csrfToken.getToken();
+            }
+            filterChain.doFilter(request, response);
+        }
     }
 
     /**

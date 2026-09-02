@@ -31,15 +31,20 @@ spring:
             # Endpoints explicitos, nao issuer-uri: issuer-uri dispara descoberta OIDC (uma
             # chamada HTTP) na inicializacao do contexto, criando uma dependencia de ordem de
             # startup contra servidor-autorizacao estar de pe. Os paths sao fixos e conhecidos.
-            authorization-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/oauth2/authorize
+            #
+            # Dois enderecos distintos, deliberadamente: o browser so alcanca servidor-autorizacao
+            # atraves do nginx (origem publica); chamadas servidor-a-servidor (token, jwks,
+            # userinfo) vao direto pela rede interna do Compose. O claim "iss" dos tokens usa o
+            # endereco interno (AUTH_SERVER_ISSUER_URI) -- e o mesmo valor que
+            # servico-carteira-clientes usa para validar, e nao precisa ser o que aparece na barra
+            # de enderecos do navegador.
+            authorization-uri: ${AUTH_SERVER_URL_PUBLICA:http://localhost:9000}/oauth2/authorize
             token-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/oauth2/token
             jwk-set-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/oauth2/jwks
             user-info-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/userinfo
             user-name-attribute: sub
 
 bff-gerente:
-  sessao:
-    segredo: ${BFF_SESSAO_SEGREDO:troque-este-segredo-de-sessao}
   carteira-clientes:
     base-url: ${CARTEIRA_CLIENTES_BASE_URL:http://localhost:8081}
     # nome logico, nao URI absoluta (RFC 8693: "resource" exige URI, "audience" nao).

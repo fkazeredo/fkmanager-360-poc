@@ -20,6 +20,9 @@ servidor-autorizacao:
 
 server:
   port: 9000
+  # O browser alcanca /oauth2/authorize e /login atraves do nginx (F7); sem isto, qualquer URL
+  # absoluta que o Spring Security gere refletiria o host/porta interno do container.
+  forward-headers-strategy: framework
 
 management:
   endpoints:

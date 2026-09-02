@@ -37,6 +37,14 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
         </dependency>
+        <!-- flyway-core usa slf4j so como API; sem uma implementacao no classpath, o
+             ServiceLoader de LogCreator falha em runtime (nao e Spring, entao nada traz
+             logback/log4j transitivamente). slf4j-simple basta para um processo one-shot que so
+             precisa escrever em stdout/stderr, capturado por `docker logs`. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -79,6 +87,11 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.fkmanager360.carteiraclientes.migracoes.MigradorApp</mainClass>
                                 </transformer>
+                                <!-- Sem isso, o shade mantem so um META-INF/services por caminho (last-wins) em
+                                     vez de mesclar, e o Flyway descobre flyway-database-postgresql via SPI
+                                     nesses arquivos. Sem a mesclagem, o plugin desaparece do jar final mesmo
+                                     estando na dependencia. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
                         </configuration>
                     </execution>
