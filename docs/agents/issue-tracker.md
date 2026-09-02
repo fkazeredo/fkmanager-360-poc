@@ -111,7 +111,8 @@ implementação — exceto quando a spec já os tornou contrato.
 `/triage` reads this flag.)_
 
 The PR remains the **review** surface: because specs and tickets are files, a change to either travels
-in a normal PR and is reviewed as a diff, next to the code it governs.
+in a normal PR and is reviewed as a diff, next to the code it governs. The target is `develop`
+(ADR-0022) — neither `main` nor `develop` takes a direct commit.
 
 ## When a skill says "publish to the issue tracker"
 
