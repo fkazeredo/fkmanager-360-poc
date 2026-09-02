@@ -9,14 +9,16 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 
 /**
- * Cliente HTTP desta ACL, com timeouts curtos e explicitos -- uma consulta de dados mestres que
- * trava indefinidamente travaria a listagem inteira da carteira.
+ * Cliente HTTP da ACL deste contexto sobre o CoreLegado, compartilhado pelos adapters que a
+ * compoem (dados mestres do Cliente e contas correntes) -- mesmo host, mesmo contrato, mesma
+ * politica de timeout. Timeouts curtos e explicitos: uma consulta que trava indefinidamente
+ * travaria a tela inteira do gerente.
  */
 @Configuration
-public class ClienteLegadoAclConfig {
+public class CoreLegadoAclConfig {
 
     @Bean
-    RestClient clienteLegadoRestClient(
+    RestClient coreLegadoRestClient(
             @Value("${carteira-clientes.core-legado.base-url}") String baseUrl,
             @Value("${carteira-clientes.core-legado.connect-timeout:PT2S}") Duration connectTimeout,
             @Value("${carteira-clientes.core-legado.read-timeout:PT3S}") Duration readTimeout) {

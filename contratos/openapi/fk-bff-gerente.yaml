@@ -5,9 +5,15 @@ info:
     Backend-for-frontend do GerenteRelacionamento. Fronteira web -- nao e bounded context
     (CONTEXT-MAP.md). Conduz Authorization Code + PKCE + OIDC contra fk-servidor-autorizacao,
     mantem a sessao em Redis via Spring Session e expoe ao app-gerente somente o que o Angular
-    precisa: identidade da sessao corrente e a composicao de tela sobre CarteiraClientes. Nenhum
-    access token ou refresh token atravessa esta fronteira para o browser (AC19).
-  version: "0001"
+    precisa: identidade da sessao corrente, a carteira, e a composicao da tela de atendimento a
+    partir de fk-servico-carteira-clientes e fk-servico-credito (AC30). Nenhum access token ou
+    refresh token atravessa esta fronteira para o browser (AC19).
+
+    O BFF obtem por Token Exchange um token para cada destino -- aud=servico-carteira-clientes e
+    aud=servico-credito -- e nunca reencaminha o token de login (ADR-0015). Nao implementa regra
+    de credito, nao fala com fk-simulador-core-legado e nao substitui a autorizacao de recurso
+    feita pelos servicos: 403 e 404 apenas atravessam.
+  version: "0002"
 servers:
   - url: /bff
     description: Origem publica atras do nginx (docker compose), TLS local.
@@ -15,7 +21,10 @@ tags:
   - name: sessao
     description: Identidade da sessao corrente, sem expor token.
   - name: carteira
-    description: Composicao de tela sobre CarteiraClientes (proxy autenticado com Token Exchange).
+    description: Listagem da CarteiraClientes (proxy autenticado com Token Exchange).
+  - name: atendimento
+    description: >-
+      Contas do Cliente e a composicao da tela de atendimento a partir dos dois contextos.
 paths:
   /api/sessao:
     get:
@@ -90,6 +99,92 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
+  /api/clientes/{clienteId}/contas:
+    get:
+      operationId: listarContasDoCliente
+      tags: [atendimento]
+      summary: ContaCorrentes do Cliente selecionado
+      description: >-
+        Encaminhamento autenticado para fk-servico-carteira-clientes, com token trocado para
+        aquele destino. Se a tela nao precisa de composicao, encaminhar e resposta legitima do BFF
+        (ADR-0013).
+      security:
+        - cookieSessao: []
+      parameters:
+        - $ref: "#/components/parameters/ClienteIdPath"
+      responses:
+        "200":
+          description: Contas do Cliente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContasResponse"
+        "401":
+          description: Sem sessao autenticada.
+        "403":
+          description: Sem direito de atendimento atual -- 403 do servico dono do recurso, repassado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: fk-servico-carteira-clientes indisponivel ou inalcancavel no momento.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /api/clientes/{clienteId}/contas/{contaId}/atendimento:
+    get:
+      operationId: consultarAtendimento
+      tags: [atendimento]
+      summary: Modelo de apresentacao da tela de atendimento -- Cliente, ContaCorrente e limite
+      description: >-
+        A composicao do AC30: montada AQUI, a partir de fk-servico-carteira-clientes (identidade e
+        vinculo) e fk-servico-credito (limite vigente), porque nenhum dos dois contextos precisa
+        conhecer dado que nao e seu. O resultado e modelo de apresentacao, nao agregado -- ninguem
+        o persiste e ninguem decide sobre ele.
+
+        Cada servico verifica o direito de atendimento por conta propria; o BFF nao e enforcement
+        point unico e tambem nao suaviza a recusa de quem e dono do recurso (ADR-0007).
+      security:
+        - cookieSessao: []
+      parameters:
+        - $ref: "#/components/parameters/ClienteIdPath"
+        - name: contaId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{1,10}$"
+      responses:
+        "200":
+          description: Cliente, ContaCorrente e LimiteChequeEspecialVigente numa unica resposta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AtendimentoResponse"
+        "401":
+          description: Sem sessao autenticada.
+        "403":
+          description: Sem direito de atendimento atual, repassado sem reinterpretacao.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: A conta nao pertence aquele Cliente, ou nao e reconhecida pelo CoreLegado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: >-
+            Um dos servicos esta indisponivel. Mensagem unica de negocio: o gerente nao precisa
+            saber qual dependencia caiu, e a distincao permanece em protocolo e diagnostico.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
   /logout:
     post:
       operationId: encerrarSessao
@@ -106,6 +201,17 @@ paths:
         "403":
           description: Token CSRF ausente ou invalido.
 components:
+  parameters:
+    ClienteIdPath:
+      name: clienteId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9]{1,10}$"
+      description: >-
+        Identificador do Cliente selecionado. Viaja no caminho porque a autorizacao de recurso
+        acontece por Cliente e precisa preceder qualquer leitura no CoreLegado (AC23).
   securitySchemes:
     cookieSessao:
       type: apiKey
@@ -135,6 +241,46 @@ components:
         cpfMascarado:
           type: string
           example: "***.456.789-**"
+    ContaResumo:
+      type: object
+      required: [contaId, agencia]
+      properties:
+        contaId:
+          type: string
+          example: "10001"
+        agencia:
+          type: string
+          example: "0001"
+    ContasResponse:
+      type: object
+      required: [itens]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContaResumo"
+    AtendimentoResponse:
+      type: object
+      required: [cliente, conta, limiteChequeEspecialVigente, consultadoEm]
+      description: >-
+        O unico lugar do sistema onde Cliente, ContaCorrente e LimiteChequeEspecialVigente
+        aparecem juntos -- e ele e apresentacao, nao agregado (CONTEXT-MAP.md, ADR-0013).
+      properties:
+        cliente:
+          $ref: "#/components/schemas/ClienteResumo"
+        conta:
+          $ref: "#/components/schemas/ContaResumo"
+        limiteChequeEspecialVigente:
+          type: integer
+          format: int64
+          description: >-
+            Valor em CENTAVOS, como inteiro (ADR-0005). A formatacao em reais pertence ao
+            fk-app-gerente -- nenhum texto de interface vem do backend.
+          example: 500000
+        consultadoEm:
+          type: string
+          format: date-time
+          description: Instante em que a plataforma leu o limite do CoreLegado.
     ClientesPageResponse:
       type: object
       required: [itens, pagina, tamanho, totalElementos, totalPaginas]

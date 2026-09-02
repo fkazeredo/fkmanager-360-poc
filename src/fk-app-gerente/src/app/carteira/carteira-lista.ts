@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, output, signal } from '@angular/core';
 import { CarteiraClientesService } from '../core/carteira-clientes';
 import { ClienteResumo } from '../core/models';
 
@@ -10,7 +10,11 @@ import { ClienteResumo } from '../core/models';
 export class CarteiraLista {
   private readonly carteiraClientes = inject(CarteiraClientesService);
 
+  /** Selecionar um Cliente e o primeiro passo do atendimento (AC22). */
+  readonly clienteSelecionado = output<ClienteResumo>();
+
   readonly items = signal<ClienteResumo[]>([]);
+  readonly selecionado = signal<ClienteResumo | null>(null);
   readonly page = signal(0);
   readonly totalPages = signal(0);
   readonly totalElements = signal(0);
@@ -37,6 +41,11 @@ export class CarteiraLista {
         this.error.set(true);
       },
     });
+  }
+
+  selecionar(cliente: ClienteResumo): void {
+    this.selecionado.set(cliente);
+    this.clienteSelecionado.emit(cliente);
   }
 
   previousPage(): void {

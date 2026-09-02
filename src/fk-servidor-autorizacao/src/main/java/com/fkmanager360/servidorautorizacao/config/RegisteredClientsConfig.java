@@ -17,25 +17,43 @@ import java.time.Duration;
 import java.util.Set;
 
 /**
- * O unico client registrado neste ticket: {@code bff-gerente}, confidencial, conduzindo
- * Authorization Code + PKCE + OIDC e, mais tarde na mesma requisicao, Token Exchange para chamar
- * servico-carteira-clientes em nome do usuario (ADR-0015). Scopes sao capacidades grossas -- nunca
- * politica de negocio.
+ * Os clients da plataforma. Scopes sao capacidades grossas -- {@code carteira.leitura},
+ * {@code credito.leitura} -- e nunca politica de negocio: {@code credito.aprovar-ate-50000} nao
+ * existe (ADR-0015).
+ *
+ * <p><b>A cadeia de delegacao, declarada por inteiro.</b> O gerente entra pelo bff-gerente com
+ * {@code openid carteira.leitura credito.leitura}. O BFF troca por um token para cada Resource
+ * Server: {@code aud = servico-carteira-clientes} com {@code carteira.leitura}, e
+ * {@code aud = servico-credito} com {@code credito.leitura carteira.leitura}. Ao continuar a
+ * operacao em nome do usuario, servico-credito troca <b>de novo</b>, pedindo apenas
+ * {@code carteira.leitura} -- a segunda perna estreita capability em vez de ganhar capability
+ * nova, e o registro abaixo torna isso estrutural: o unico scope que servico-credito conhece e
+ * {@code carteira.leitura}, entao nem formular um pedido mais amplo e possivel. A verificacao
+ * complementar, de que nada pedido excede o que o subject token ja tinha, esta em
+ * {@link TokenExchangePolicyAuthenticationProvider}.
  */
 @Configuration
 public class RegisteredClientsConfig {
 
+    static final String SCOPE_CARTEIRA_LEITURA = "carteira.leitura";
+    static final String SCOPE_CREDITO_LEITURA = "credito.leitura";
+
+    static final String AUD_CARTEIRA_CLIENTES = "servico-carteira-clientes";
+    static final String AUD_CREDITO = "servico-credito";
+
     @Bean
     RegisteredClientRepository registeredClientRepository(
             PasswordEncoder passwordEncoder,
-            @Value("${servidor-autorizacao.bff-client.client-id}") String clientId,
-            @Value("${servidor-autorizacao.bff-client.client-secret}") String clientSecret,
+            @Value("${servidor-autorizacao.bff-client.client-id}") String bffClientId,
+            @Value("${servidor-autorizacao.bff-client.client-secret}") String bffClientSecret,
             @Value("${servidor-autorizacao.bff-client.redirect-uri}") String redirectUri,
-            @Value("${servidor-autorizacao.bff-client.post-logout-redirect-uri}") String postLogoutRedirectUri) {
+            @Value("${servidor-autorizacao.bff-client.post-logout-redirect-uri}") String postLogoutRedirectUri,
+            @Value("${servidor-autorizacao.credito-client.client-id}") String creditoClientId,
+            @Value("${servidor-autorizacao.credito-client.client-secret}") String creditoClientSecret) {
 
         RegisteredClient bffGerente = RegisteredClient.withId("bff-gerente-client")
-                .clientId(clientId)
-                .clientSecret(passwordEncoder.encode(clientSecret))
+                .clientId(bffClientId)
+                .clientSecret(passwordEncoder.encode(bffClientSecret))
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
@@ -44,16 +62,16 @@ public class RegisteredClientsConfig {
                 .postLogoutRedirectUri(postLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
-                .scope("carteira.leitura")
+                .scope(SCOPE_CARTEIRA_LEITURA)
+                .scope(SCOPE_CREDITO_LEITURA)
                 .clientSettings(ClientSettings.builder()
                         // PKCE obrigatorio: sem isto, o ticket nao terminou.
                         .requireProofKey(true)
                         .requireAuthorizationConsent(false)
-                        // Allow-list de Token Exchange (ADR-0015): bff-gerente so pode trocar por
-                        // token com este destino. Lido por
-                        // TokenExchangeAudienceAllowListAuthenticationProvider antes da emissao.
-                        .setting(TokenExchangeAudienceAllowListAuthenticationProvider.ALLOWED_TARGETS_SETTING,
-                                Set.of("servico-carteira-clientes"))
+                        // Allow-list de Token Exchange (ADR-0015): o BFF fala com os dois Resource
+                        // Servers que a tela de atendimento compoe, e com mais nenhum.
+                        .setting(TokenExchangePolicyAuthenticationProvider.ALLOWED_TARGETS_SETTING,
+                                Set.of(AUD_CARTEIRA_CLIENTES, AUD_CREDITO))
                         .build())
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenTimeToLive(Duration.ofMinutes(5))
@@ -62,6 +80,27 @@ public class RegisteredClientsConfig {
                         .build())
                 .build();
 
-        return new InMemoryRegisteredClientRepository(bffGerente);
+        // Identidade de client propria: cada deployable que chama outro precisa da sua, para que
+        // "quem chamou" seja sempre uma pergunta respondivel (ADR-0015).
+        RegisteredClient servicoCredito = RegisteredClient.withId("servico-credito-client")
+                .clientId(creditoClientId)
+                .clientSecret(passwordEncoder.encode(creditoClientSecret))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                // Somente token-exchange: este client nunca inicia uma sessao de usuario nem age
+                // por conta propria -- ele so continua uma operacao que ja chegou autenticada.
+                .authorizationGrantType(AuthorizationGrantType.TOKEN_EXCHANGE)
+                // Um unico scope registrado, e de proposito: nao ha como este client pedir
+                // credito.leitura, credito.escrita ou qualquer outra coisa numa troca.
+                .scope(SCOPE_CARTEIRA_LEITURA)
+                .clientSettings(ClientSettings.builder()
+                        .setting(TokenExchangePolicyAuthenticationProvider.ALLOWED_TARGETS_SETTING,
+                                Set.of(AUD_CARTEIRA_CLIENTES))
+                        .build())
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenTimeToLive(Duration.ofMinutes(5))
+                        .build())
+                .build();
+
+        return new InMemoryRegisteredClientRepository(bffGerente, servicoCredito);
     }
 }

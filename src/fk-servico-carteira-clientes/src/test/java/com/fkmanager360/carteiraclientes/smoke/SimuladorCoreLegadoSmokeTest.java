@@ -1,7 +1,9 @@
 package com.fkmanager360.carteiraclientes.smoke;
 
 import com.fkmanager360.carteiraclientes.adapter.out.legacy.ClienteLegadoAclAdapter;
+import com.fkmanager360.carteiraclientes.adapter.out.legacy.ContaLegadoAclAdapter;
 import com.fkmanager360.carteiraclientes.domain.ClienteId;
+import com.fkmanager360.carteiraclientes.domain.ContaCorrente;
 import com.fkmanager360.carteiraclientes.domain.DadosMestresCliente;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -70,17 +72,23 @@ class SimuladorCoreLegadoSmokeTest {
         }
     }
 
-    private ClienteLegadoAclAdapter adapterContraOSimuladorReal() {
+    private RestClient restClientContraOSimuladorReal() {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
         requestFactory.setReadTimeout(Duration.ofSeconds(5));
 
-        RestClient restClient = RestClient.builder()
+        return RestClient.builder()
                 .baseUrl("http://" + SIMULADOR.getHost() + ":" + SIMULADOR.getMappedPort(8090))
                 .requestFactory(requestFactory)
                 .build();
+    }
 
-        return new ClienteLegadoAclAdapter(restClient);
+    private ClienteLegadoAclAdapter adapterContraOSimuladorReal() {
+        return new ClienteLegadoAclAdapter(restClientContraOSimuladorReal());
+    }
+
+    private ContaLegadoAclAdapter adapterDeContasContraOSimuladorReal() {
+        return new ContaLegadoAclAdapter(restClientContraOSimuladorReal());
     }
 
     @Test
@@ -110,5 +118,22 @@ class SimuladorCoreLegadoSmokeTest {
                 List.of(new ClienteId("1"), new ClienteId("101"), new ClienteId("999999")));
 
         assertThat(resultado).containsOnlyKeys(new ClienteId("1"), new ClienteId("101"));
+    }
+
+    @Test
+    void contasDoCliente_saoResolvidasPeloSimuladorReal() {
+        var adapter = adapterDeContasContraOSimuladorReal();
+
+        List<ContaCorrente> contas = adapter.buscarContasDoCliente(new ClienteId("1"));
+
+        assertThat(contas).extracting(conta -> conta.contaId().valor()).containsExactly("10001", "10002");
+        assertThat(contas).extracting(ContaCorrente::agencia).containsOnly("0001");
+    }
+
+    @Test
+    void clienteSemConta_devolveListaVazia_contraOSimuladorReal() {
+        var adapter = adapterDeContasContraOSimuladorReal();
+
+        assertThat(adapter.buscarContasDoCliente(new ClienteId("123456"))).isEmpty();
     }
 }

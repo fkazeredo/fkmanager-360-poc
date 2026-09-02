@@ -15,6 +15,27 @@ export interface ClientesPage {
   totalPaginas: number;
 }
 
+export interface ContaResumo {
+  contaId: string;
+  agencia: string;
+}
+
+export interface ContasDoCliente {
+  itens: ContaResumo[];
+}
+
+/**
+ * O modelo de apresentacao da tela de atendimento, composto pelo bff-gerente a partir de
+ * servico-carteira-clientes e servico-credito (AC30). O limite vem em centavos: a formatacao em
+ * reais e daqui, e nenhum texto de interface vem do backend.
+ */
+export interface Atendimento {
+  cliente: ClienteResumo;
+  conta: ContaResumo;
+  limiteChequeEspecialVigente: number;
+  consultadoEm: string;
+}
+
 export interface Session {
   gerenteId: string;
 }

@@ -23,6 +23,27 @@
         substitui a autorizacao de recurso feita pelos servicos (ADR-0004, ADR-0007).
     </description>
 
+    <properties>
+        <wiremock.version>3.13.2</wiremock.version>
+    </properties>
+
+    <!--
+        Mesmo alinhamento de jetty que os demais modulos com WireMock precisam: wiremock-jetty12
+        pede jetty-ee10-bom 12.0.30 internamente, mas spring-boot-dependencies ja importa
+        jetty-bom/jetty-ee11-bom 12.1.12, e as duas versoes sao binariamente incompativeis.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.eclipse.jetty.ee10</groupId>
+                <artifactId>jetty-ee10-bom</artifactId>
+                <version>12.1.12</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -63,6 +84,15 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- S6 da composicao: os dois Resource Servers e o simulador representados por mock HTTP
+             server real, para que "o BFF nao chama o Core" (AC30) seja uma asercao sobre trafego
+             observado, e nao sobre leitura de codigo. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-jetty12</artifactId>
+            <version>${wiremock.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

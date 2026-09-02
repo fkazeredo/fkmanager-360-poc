@@ -27,3 +27,19 @@
 .erro {
   color: #b00020;
 }
+
+/* O item inteiro e o alvo de clique: selecionar o Cliente e uma acao, nao um link de navegacao. */
+.selecionar-cliente {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+}
+
+.lista-clientes li.selecionado {
+  background: #f1f8f4;
+}

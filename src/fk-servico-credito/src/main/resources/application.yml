@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: fk-servico-credito
+  security:
+    oauth2:
+      # Resource Server: valida os tokens que chegam.
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_SERVER_ISSUER_URI:}
+      # Client: servico-credito tambem e OAuth client, para continuar a operacao em nome do
+      # usuario contra servico-carteira-clientes por Token Exchange (ADR-0015). O scope pedido e
+      # somente carteira.leitura -- a troca REDUZ capability em relacao ao token recebido, que
+      # carrega credito.leitura e carteira.leitura, e nunca introduz scope novo.
+      client:
+        registration:
+          carteira-clientes-exchange:
+            provider: servidor-autorizacao
+            client-id: ${AUTH_SERVER_CREDITO_CLIENT_ID:servico-credito}
+            client-secret: ${AUTH_SERVER_CREDITO_CLIENT_SECRET:troque-este-client-secret}
+            authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
+            scope: carteira.leitura
+        provider:
+          servidor-autorizacao:
+            # Endpoint explicito, nao issuer-uri: issuer-uri dispararia descoberta OIDC na
+            # inicializacao do contexto, criando dependencia de ordem de startup.
+            token-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/oauth2/token
+
+credito:
+  core-legado:
+    base-url: ${CORE_LEGADO_BASE_URL}
+    connect-timeout: PT2S
+    read-timeout: PT3S
+  carteira-clientes:
+    base-url: ${CARTEIRA_CLIENTES_BASE_URL}
+    connect-timeout: PT2S
+    read-timeout: PT5S
+    # nome logico, nao URI absoluta (RFC 8693: "resource" exige URI, "audience" nao).
+    audience: servico-carteira-clientes
+  # aud esperado neste servico, validado pelo AudienceValidator alem do issuer padrao do Spring.
+  security:
+    expected-audience: servico-credito
+
+server:
+  port: 8083
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    readinessstate:
+      enabled: true

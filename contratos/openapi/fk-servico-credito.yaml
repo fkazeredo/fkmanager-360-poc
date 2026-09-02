@@ -1,0 +1,154 @@
+openapi: 3.0.3
+info:
+  title: fk-servico-credito
+  description: >-
+    Resource Server do bounded context Credito, dono semantico do LimiteChequeEspecial. Neste
+    ticket (#0002), expoe a consulta do LimiteChequeEspecialVigente que o CoreLegado reconhece no
+    momento da consulta, lido pela ACL propria deste contexto (ADR-0004). Nasce SEM persistencia:
+    nao ha estado duravel de Credito ainda (ADR-0010, ADR-0014).
+
+    A verificacao do direito de atendimento em fk-servico-carteira-clientes PRECEDE qualquer
+    acesso ao CoreLegado: sem direito, a resposta e 403 e nenhuma consulta ao Core e emitida
+    (AC23). Para isso este servico atua como OAuth client e troca o token que recebeu por um com
+    aud=servico-carteira-clientes, reduzindo o scope para carteira.leitura (ADR-0015, AC21).
+
+    Nao devolve dados cadastrais do Cliente, que pertencem a CarteiraClientes (AC30), nem a
+    ClassificacaoRiscoCreditoBase, que e insumo interno da politica e nunca e apresentada ao
+    GerenteRelacionamento.
+  version: "0002"
+servers:
+  - url: http://localhost:8083
+    description: Rede interna do Docker Compose (nome de servico), porta exposta localmente para dev.
+tags:
+  - name: limite
+    description: Leitura do LimiteChequeEspecialVigente reconhecido pelo CoreLegado.
+paths:
+  /clientes/{clienteId}/contas/{contaId}/limite-cheque-especial-vigente:
+    get:
+      operationId: consultarLimiteChequeEspecialVigente
+      tags: [limite]
+      summary: LimiteChequeEspecialVigente da ContaCorrente, lido do CoreLegado agora
+      description: >-
+        O clienteId compoe o caminho porque a autorizacao de recurso em CarteiraClientes e por
+        Cliente e precisa acontecer antes de qualquer leitura no Core. Ele nao e aceito como
+        verdade sobre a quem a conta pertence: essa confirmacao e autoritativa e vem de
+        CarteiraClientes contra o CoreLegado (ADR-0002, ADR-0007).
+      security:
+        - bearerJwt: [credito.leitura]
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{1,10}$"
+          description: Identificador do Cliente, sem zero-padding (a formatacao host e da ACL).
+        - name: contaId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{1,10}$"
+          description: Identificador da ContaCorrente, sem zero-padding.
+      responses:
+        "200":
+          description: Limite vigente reconhecido pelo CoreLegado no instante da consulta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LimiteChequeEspecialVigenteResponse"
+        "400":
+          description: Identificador fora do formato esperado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: >-
+            Sem token, token expirado, assinatura invalida, issuer incorreto ou audience
+            incorreta (AC21).
+        "403":
+          description: >-
+            Sem direito de atendimento atual sobre o Cliente, conforme fk-servico-carteira-clientes.
+            NENHUMA chamada ao CoreLegado e emitida neste caso (AC23). Tambem 403 quando o token
+            nao tem o scope credito.leitura ou o papel GERENTE_RELACIONAMENTO.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: >-
+            A conta nao pertence aquele Cliente, ou o CoreLegado nao a conhece. Nenhuma chamada ao
+            Core acontece no primeiro caso.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "502":
+          description: O CoreLegado respondeu algo que a ACL nao sabe interpretar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: CoreLegado ou fk-servico-carteira-clientes indisponivel.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "504":
+          description: Timeout ao consultar o CoreLegado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Token emitido por fk-servidor-autorizacao (Token Exchange a partir da sessao do
+        fk-bff-gerente), com aud=servico-credito. Carrega credito.leitura, exigido por esta API, e
+        carteira.leitura, que este servico estreita na troca seguinte contra
+        fk-servico-carteira-clientes -- a cadeia reduz capability, nunca amplia (ADR-0015).
+  schemas:
+    LimiteChequeEspecialVigenteResponse:
+      type: object
+      required: [contaId, limiteChequeEspecialVigente, consultadoEm]
+      properties:
+        contaId:
+          type: string
+          example: "10001"
+        limiteChequeEspecialVigente:
+          type: integer
+          format: int64
+          description: >-
+            Valor em CENTAVOS, como inteiro. Ponto flutuante nao e usado em nenhuma camada
+            (ADR-0005), e a formatacao em reais pertence ao fk-app-gerente.
+          example: 500000
+        consultadoEm:
+          type: string
+          format: date-time
+          description: >-
+            Instante em que ESTA PLATAFORMA capturou os fatos do CoreLegado com sucesso. Nao e a
+            data em que o host atualizou o limite (DAT-ATU-LIM no contrato host-centric), que e
+            informacao da fonte sobre a fonte e permanece encapsulada na ACL.
+          example: "2026-09-02T16:00:00Z"
+    ProblemDetail:
+      type: object
+      description: RFC 7807 (org.springframework.http.ProblemDetail).
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri

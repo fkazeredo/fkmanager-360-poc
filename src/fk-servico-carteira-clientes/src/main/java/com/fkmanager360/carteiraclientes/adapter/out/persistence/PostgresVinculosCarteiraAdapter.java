@@ -46,4 +46,21 @@ public class PostgresVinculosCarteiraAdapter implements VinculosCarteiraPort {
 
         return new PageResult<>(items, pagination.page(), pagination.size(), total);
     }
+
+    @Override
+    public boolean existeVinculo(GerenteId gerenteId, ClienteId clienteId) {
+        // exists(...) e nao count(*): a pergunta e binaria, e o plano do PostgreSQL pode parar na
+        // primeira linha encontrada. A unique constraint (gerente_id, cliente_id) ja garante que
+        // nunca ha mais de uma.
+        return jdbcClient.sql("""
+                        select exists(
+                            select 1 from vinculo_carteira
+                            where gerente_id = :gerenteId and cliente_id = :clienteId
+                        )
+                        """)
+                .param("gerenteId", gerenteId.valor())
+                .param("clienteId", clienteId.valor())
+                .query(Boolean.class)
+                .single();
+    }
 }

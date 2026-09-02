@@ -96,6 +96,39 @@ class PostgresVinculosCarteiraAdapterTest {
         assertThat(pagina.totalElements()).isZero();
     }
 
+    /**
+     * A partir de #0002 esta consulta deixou de ser mais uma leitura: ela e o guard que precede
+     * toda chamada ao CoreLegado (AC23). Um falso positivo aqui autorizaria um atendimento
+     * indevido; um falso negativo bloquearia atendimento legitimo. Por isso ela e provada contra
+     * PostgreSQL real, e nao contra um fake de repositorio.
+     */
+    @Test
+    void existeVinculo_gerenteComVinculoAtualComAqueleCliente_eVerdadeiro() {
+        assertThat(adapter.existeVinculo(new GerenteId("gerente.a"), new ClienteId("1"))).isTrue();
+        assertThat(adapter.existeVinculo(new GerenteId("gerente.b"), new ClienteId("101"))).isTrue();
+    }
+
+    @Test
+    void existeVinculo_gerenteSemVinculoComAqueleCliente_eFalso() {
+        // O Cliente "101" existe e tem carteira -- so nao a do gerente.a. A ausencia e do vinculo,
+        // nao do Cliente: e exatamente a distincao que faz a segregacao ser real.
+        assertThat(adapter.existeVinculo(new GerenteId("gerente.a"), new ClienteId("101"))).isFalse();
+        assertThat(adapter.existeVinculo(new GerenteId("gerente.b"), new ClienteId("1"))).isFalse();
+    }
+
+    @Test
+    void existeVinculo_clienteQueExisteNoCoreMasNaoTemCarteira_eFalso() {
+        // Cliente "999" e semeado no simulador e deliberadamente sem vinculo aqui: existir no
+        // Core, isolado, nao concede acesso a ninguem.
+        assertThat(adapter.existeVinculo(new GerenteId("gerente.a"), new ClienteId("999"))).isFalse();
+    }
+
+    @Test
+    void existeVinculo_identificadorInexistente_eFalso_semLancar() {
+        assertThat(adapter.existeVinculo(new GerenteId("gerente.inexistente"), new ClienteId("1"))).isFalse();
+        assertThat(adapter.existeVinculo(new GerenteId("gerente.a"), new ClienteId("8888888888"))).isFalse();
+    }
+
     @Test
     void buscarPagina_sobConcorrenciaReal_naoCorrompeContagemNemOrdenacao() throws Exception {
         // Nao ha escrita concorrente neste ticket (a associacao e semeada por migration), mas a

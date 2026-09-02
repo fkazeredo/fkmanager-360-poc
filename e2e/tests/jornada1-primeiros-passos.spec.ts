@@ -6,9 +6,11 @@ import { readDemoCredentials } from './demo-credentials';
 const repoRoot = path.resolve(__dirname, '..', '..');
 
 /**
- * S7: harness Playwright contra a stack real do Compose (F7), sem bypass de seguranca. Estas
- * asercoes sao os primeiros passos da jornada 1 (AC19, AC20, AC22 parcial) -- a jornada so
- * fecha em #0005, entao nenhuma etapa alem de login/carteira/logout e exercitada aqui.
+ * S7: harness Playwright contra a stack real do Compose, sem bypass de seguranca. Estas asercoes
+ * sao os primeiros passos da jornada 1 (AC19, AC20, AC21, AC22, AC29 parcial, AC30) -- a jornada
+ * so fecha em #0005, entao nenhuma etapa alem de login, carteira, selecao de conta e leitura do
+ * limite e exercitada aqui. Nenhuma jornada nova e criada: as quatro canonicas da spec continuam
+ * sendo as mesmas.
  */
 
 const credentials = readDemoCredentials();
@@ -116,6 +118,89 @@ test.describe('Jornada 1 -- primeiros passos', () => {
       await contextoA.close();
       await contextoB.close();
     }
+  });
+
+  /**
+   * O passo que #0002 acrescenta a jornada: escolher o Cliente, escolher a ContaCorrente e ver o
+   * LimiteChequeEspecialVigente. Prova a topologia inteira de uma vez -- o Token Exchange
+   * encadeado (AC21), a autorizacao de recurso nos dois backends (AC23) e a composicao do BFF a
+   * partir dos dois contextos (AC30) --, coisas que so falham de verdade com a stack de pe.
+   */
+  test('AC22/AC29: selecionar cliente e conta mostra o LimiteChequeEspecialVigente vindo do Core', async ({
+    page,
+  }) => {
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
+
+    await page.locator('.lista-clientes li .selecionar-cliente').first().click();
+
+    const atendimento = page.locator('.atendimento');
+    await expect(atendimento).toBeVisible();
+    await expect(atendimento.locator('.cliente-nome')).toHaveText(/\S/);
+
+    // O cliente 1 tem duas contas no dataset do simulador: escolher a conta certa antes de
+    // qualquer solicitacao precisa ser uma escolha de verdade.
+    const contas = atendimento.locator('.lista-contas .conta');
+    await expect(contas.first()).toBeVisible();
+    expect(await contas.count()).toBeGreaterThan(1);
+
+    await contas.first().click();
+
+    const limite = atendimento.locator('.limite-vigente .valor');
+    await expect(limite).toBeVisible();
+    // O valor exato semeado no simulador para esta conta (500000 centavos), formatado em pt-BR
+    // pelo Angular: prova que o que a tela mostra e o que o CoreLegado reconhece, atravessando a
+    // ACL de Credito e a composicao do BFF sem ser reinterpretado no caminho (AC29, ADR-0002).
+    await expect(limite).toHaveText(/R\$\s*5\.000,00/);
+    await expect(atendimento.locator('.limite-vigente .procedencia')).toContainText('CoreLegado');
+  });
+
+  test('AC30: a tela de atendimento e composta pelo bff-gerente, e o browser nunca fala com outro backend', async ({
+    page,
+  }) => {
+    const origensChamadas = new Set<string>();
+    page.on('request', (requisicao) => {
+      const url = new URL(requisicao.url());
+      origensChamadas.add(url.origin);
+    });
+
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
+    await page.locator('.lista-clientes li .selecionar-cliente').first().click();
+    await page.locator('.atendimento .lista-contas .conta').first().click();
+    await expect(page.locator('.limite-vigente .valor')).toBeVisible();
+
+    // Um unico endereco publico: nem servico-credito, nem servico-carteira-clientes, nem o
+    // simulador tem porta publicada -- a composicao acontece no servidor (AC30).
+    expect([...origensChamadas]).toEqual(['https://localhost']);
+  });
+
+  test('AC23: sem direito de atendimento, o backend recusa mesmo sem passar pela navegacao do Angular', async ({
+    page,
+  }) => {
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
+
+    // Cliente 101 pertence a carteira do gerente.b. A requisicao vai direto ao BFF, sem passar
+    // por botao algum: ocultar opcoes no Angular nunca e o controle (ADR-0007).
+    const contasDeOutraCarteira = await page.request.get('/bff/api/clientes/101/contas');
+    expect(contasDeOutraCarteira.status()).toBe(403);
+
+    const atendimentoDeOutraCarteira = await page.request.get(
+      '/bff/api/clientes/101/contas/20001/atendimento',
+    );
+    expect(atendimentoDeOutraCarteira.status()).toBe(403);
+
+    // Cliente 999 existe no CoreLegado e nao esta na carteira de ninguem: existir no Core,
+    // isolado, nao concede acesso.
+    const clienteSemCarteira = await page.request.get('/bff/api/clientes/999/contas');
+    expect(clienteSemCarteira.status()).toBe(403);
+  });
+
+  test('AC23: uma conta que nao e do Cliente autorizado nao produz atendimento', async ({ page }) => {
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
+
+    // O gerente tem direito sobre o Cliente 1, e manda a conta 10003, que e do Cliente 2. Quem
+    // afirma a quem a conta pertence e o CoreLegado, nunca o payload de quem chamou.
+    const parIncoerente = await page.request.get('/bff/api/clientes/1/contas/10003/atendimento');
+    expect(parIncoerente.status()).toBe(404);
   });
 
   test('AC20: uma escrita sem o token CSRF esperado e recusada, e o logout real invalida a sessao', async ({

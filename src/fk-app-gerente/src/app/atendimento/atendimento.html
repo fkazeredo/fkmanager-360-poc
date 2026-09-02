@@ -1,0 +1,47 @@
+<section class="atendimento">
+  <h2>Atendimento</h2>
+
+  <dl class="cliente-em-atendimento">
+    <dt>Cliente</dt>
+    <dd class="cliente-nome">{{ cliente().nome }}</dd>
+    <dt>CPF</dt>
+    <dd class="cliente-cpf">{{ cliente().cpfMascarado }}</dd>
+  </dl>
+
+  @if (carregandoContas()) {
+    <p>Carregando contas...</p>
+  } @else if (contas().length === 0 && !erro()) {
+    <p>Este cliente nao possui conta corrente.</p>
+  } @else {
+    <ul class="lista-contas">
+      @for (conta of contas(); track conta.contaId) {
+        <li>
+          <button
+            type="button"
+            class="conta"
+            [class.selecionada]="contaSelecionada()?.contaId === conta.contaId"
+            (click)="selecionarConta(conta)">
+            Ag. {{ conta.agencia }} &middot; Conta {{ conta.contaId }}
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (erro()) {
+    <p class="erro">{{ erro() }}</p>
+  }
+
+  @if (carregandoLimite()) {
+    <p>Consultando o limite no CoreLegado...</p>
+  } @else if (atendimento(); as dados) {
+    <div class="limite-vigente">
+      <span class="rotulo">Limite de cheque especial vigente</span>
+      <strong class="valor">{{ limiteFormatado() }}</strong>
+      <span class="procedencia">
+        Confirmado pelo CoreLegado em {{ dados.consultadoEm | date: 'dd/MM/yyyy HH:mm' }}
+        para a conta {{ dados.conta.contaId }} de {{ dados.cliente.nome }}
+      </span>
+    </div>
+  }
+</section>

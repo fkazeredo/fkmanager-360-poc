@@ -66,6 +66,10 @@ services:
       AUTH_SERVER_BFF_REDIRECT_URI: ${AUTH_SERVER_BFF_REDIRECT_URI}
       AUTH_SERVER_BFF_POST_LOGOUT_REDIRECT_URI: ${AUTH_SERVER_BFF_POST_LOGOUT_REDIRECT_URI}
       AUTH_SERVER_DEMO_USERS: ${AUTH_SERVER_DEMO_USERS}
+      # Identidade de client propria de servico-credito, usada so no Token Exchange encadeado
+      # contra servico-carteira-clientes (ADR-0015).
+      AUTH_SERVER_CREDITO_CLIENT_ID: ${AUTH_SERVER_CREDITO_CLIENT_ID}
+      AUTH_SERVER_CREDITO_CLIENT_SECRET: ${AUTH_SERVER_CREDITO_CLIENT_SECRET}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/.well-known/openid-configuration"]
       interval: 5s
@@ -99,6 +103,31 @@ services:
       timeout: 5s
       retries: 10
 
+  # Contexto Credito. Sem database, e a ausencia e deliberada: nao existe estado duravel de
+  # Credito neste ticket, e credito_db nasce com a SolicitacaoAumentoLimite (ADR-0010, ADR-0014).
+  servico-credito:
+    build:
+      context: .
+      dockerfile: src/fk-servico-credito/Dockerfile
+    environment:
+      CORE_LEGADO_BASE_URL: http://simulador-core-legado:8090
+      CARTEIRA_CLIENTES_BASE_URL: http://servico-carteira-clientes:8081
+      AUTH_SERVER_ISSUER_URI: http://servidor-autorizacao:9000
+      AUTH_SERVER_CREDITO_CLIENT_ID: ${AUTH_SERVER_CREDITO_CLIENT_ID}
+      AUTH_SERVER_CREDITO_CLIENT_SECRET: ${AUTH_SERVER_CREDITO_CLIENT_SECRET}
+    depends_on:
+      simulador-core-legado:
+        condition: service_healthy
+      servico-carteira-clientes:
+        condition: service_healthy
+      servidor-autorizacao:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   bff-gerente:
     build:
       context: .
@@ -112,12 +141,15 @@ services:
       AUTH_SERVER_BFF_CLIENT_ID: ${AUTH_SERVER_BFF_CLIENT_ID}
       AUTH_SERVER_BFF_CLIENT_SECRET: ${AUTH_SERVER_BFF_CLIENT_SECRET}
       CARTEIRA_CLIENTES_BASE_URL: http://servico-carteira-clientes:8081
+      CREDITO_BASE_URL: http://servico-credito:8083
     depends_on:
       redis:
         condition: service_healthy
       servidor-autorizacao:
         condition: service_healthy
       servico-carteira-clientes:
+        condition: service_healthy
+      servico-credito:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/bff/actuator/health"]
