@@ -58,3 +58,21 @@ primeira hipótese é que a regra vazou para fora do domínio.
 
 O simulador passa a ter duas interfaces com propósitos distintos, e confundi-las — expor controle de
 cenário como se fosse capacidade do Core — destruiria o valor da simulação.
+
+## Emenda — 2026-09-02: a lista de jornadas E2E é representativa
+
+A faixa continua sendo de três a cinco jornadas Playwright de alto valor, e a lista nomeada no texto
+original é **representativa, não exaustiva**: uma spec futura pode trocar uma jornada por outra de
+valor arquitetural maior sem emendar esta decisão. O que não muda é o critério — E2E prova a
+topologia, não a regra, e Playwright não vira matriz completa de regras de negócio.
+
+O grilling do slice 1 acrescentou uma jornada que o texto original não previa: **efetivação
+indeterminada com conclusão tardia**. Ela prova em conjunto o control plane do simulador, a janela de
+reconciliação, a entrada em `EFETIVACAO_INDETERMINADA` (ADR-0009, emenda de 2026-09-02), o bloqueio
+de nova solicitação para a mesma ContaCorrente enquanto o resultado é desconhecido, o callback tardio
+e a conclusão posterior.
+
+Ao final do slice 1, uma seleção plausível é: aprovação straight-through até `EFETIVADA`; rejeição
+automática; callback perdido recuperado pela reconciliação; e efetivação indeterminada com conclusão
+tardia. Quando os slices de decisão humana existirem, uma delas pode ceder lugar — ou a quinta
+posição receber risco, parecer, decisão humana e efetivação.

@@ -34,3 +34,19 @@ organizacional vigente no momento da origem.
 
 Analistas e supervisores acessam solicitações segundo suas filas, permissões e alçadas, não segundo
 a carteira original do gerente.
+
+## Emenda — 2026-09-02: a pergunta deixada em aberto tem resposta
+
+As Consequências acima registram como pendente decidir se o gerente continua enxergando o histórico
+de uma solicitação depois que o Cliente muda de carteira. O grilling do slice 1 decidiu: **sim, pelo
+`originadorId`**. O ator continua precisando estar autenticado e possuir a capacidade de
+`GerenteRelacionamento`; ser o originador não substitui autenticação nem papel.
+
+Isso é autorização sobre o **processo de Crédito**, e não sobre o Cliente. Ela não concede abrir o
+perfil atual do Cliente, consultar a ContaCorrente ou o limite vigente, nem originar nova
+solicitação — tudo isso continua exigindo direito de atendimento **atual**, verificado por
+`CarteiraClientes`. Na prática, a tela de histórico renderiza a partir dos dados persistidos do
+próprio processo e não usa a permissão histórica para compor dados atuais em `CarteiraClientes`.
+
+No slice 1 o acesso histórico é concedido **somente ao originador**. Novo gerente da carteira,
+supervisor e auditor são perfis de acesso que serão definidos pelas features que os introduzirem.

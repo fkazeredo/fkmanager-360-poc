@@ -40,7 +40,9 @@ _Evitar_: Sistema, Automático, Job
 
 **GerenteRelacionamento**:
 Funcionário do banco responsável por uma CarteiraClientes. Registra no sistema a solicitação
-manifestada pelo Cliente e acompanha seu andamento. Nunca decide sobre a solicitação que ele
+manifestada pelo Cliente e acompanha seu andamento, inclusive o das solicitações que originou para
+um Cliente que depois deixou sua CarteiraClientes: acesso ao processo e acesso atual ao Cliente são
+regras distintas, e a primeira não concede a segunda. Nunca decide sobre a solicitação que ele
 próprio originou (ADR-0007).
 _Evitar_: Gerente de Contas, Gestor, Operador
 
@@ -123,25 +125,67 @@ AlcadaAprovacao.
 
 **SolicitacaoAumentoLimite**:
 Pedido de aumento do LimiteChequeEspecial de uma ContaCorrente, registrado pelo
-GerenteRelacionamento a partir de manifestação do Cliente. Agregado central do contexto.
+GerenteRelacionamento a partir de manifestação do Cliente. Agregado central do contexto. Uma
+ContaCorrente possui no máximo uma SolicitacaoAumentoLimite em estado não terminal — regra que
+atravessa instâncias do agregado e, por isso, não é imposta por uma delas isoladamente.
 _Evitar_: Proposta, Pedido, Alteração de limite
 
 **OrigemSolicitacao**:
-Registro de que a solicitação partiu do Cliente e de como ela chegou ao gerente. Simplificação
-deliberada: não modela consentimento formal nem assinatura eletrônica.
-_Evitar_: Consentimento, Anuência, Autorização
+Quem originou a solicitação. Hoje possui um único valor — CLIENTE —, estabelecido pelo domínio e
+nunca aceito do cliente HTTP: o GerenteRelacionamento registra o que o Cliente manifestou, e não uma
+iniciativa própria. Simplificação deliberada: não modela consentimento formal nem assinatura
+eletrônica.
+_Evitar_: Consentimento, Anuência, Autorização, Canal
+
+**ManifestacaoCliente**:
+Como a manifestação do Cliente chegou ao GerenteRelacionamento: o CanalManifestacao e uma observação
+opcional do gerente. Distinta da OrigemSolicitacao, que diz quem originou. Junto com o originadorId
+e o instante de registro, é a evidência operacional de que a solicitação partiu do Cliente — e
+deliberadamente não prova jurídica.
+_Evitar_: Consentimento, Origem, Solicitação do cliente
+
+**CanalManifestacao**:
+Meio pelo qual o Cliente manifestou o pedido ao gerente: PRESENCIAL, TELEFONE ou CANAL_DIGITAL.
 
 **StatusSolicitacaoAumentoLimite**:
 Estado operacional do processo, distinto do resultado da DecisaoCredito. Existem apenas os estados
-que o slice atual exercita: SOLICITADA, AGUARDANDO_EFETIVACAO, EFETIVADA, REJEITADA e
-FALHA_EFETIVACAO (ADR-0010).
+que o slice atual exercita: SOLICITADA, AGUARDANDO_EFETIVACAO, EFETIVACAO_INDETERMINADA, EFETIVADA,
+REJEITADA e FALHA_EFETIVACAO (ADR-0010). Os três primeiros são não terminais.
 _Evitar_: APROVADA como status — aprovação é resultado de decisão, não estado de workflow
+
+**EFETIVACAO_INDETERMINADA**:
+Estado não terminal em que a SolicitacaoAumentoLimite entra quando a recuperação automática se
+esgota sem resposta autoritativa do CoreLegado. Afirma ignorância, e não falha: o limite pode ter
+sido efetivado. Continua bloqueando nova solicitação para a mesma ContaCorrente e continua
+recuperável — um callback ou uma consulta posterior o conclui em EFETIVADA ou FALHA_EFETIVACAO. Seu
+contrário é FALHA_EFETIVACAO, que exige evidência autoritativa de que a efetivação não ocorreu
+(ADR-0009).
+_Evitar_: FALHA_EFETIVACAO para ausência de resposta, Timeout, Pendente, Em processamento
 
 **ContextoDecisaoCredito**:
 Fotografia imutável dos fatos considerados no momento da submissão, junto com a
 `versaoPoliticaCredito` aplicada. Guarda indicadores derivados e sua procedência, nunca os dados
-brutos que os originaram (ADR-0006).
+brutos que os originaram (ADR-0006). Contém somente o que a decisão usou e o que permite
+reproduzi-la: a identidade do sujeito e a verificação do direito de atendimento não entram — elas
+pertencem à SolicitacaoAumentoLimite, porque respondem "quem podia operar", e não "com quais fatos
+se decidiu".
 _Evitar_: Snapshot, Dados do cliente, Payload da proposta
+
+**ClassificacaoRiscoCreditoBase**:
+Classificação de risco simples que o CoreLegado já mantém para a operação bancária corrente —
+BAIXO, MEDIO ou ALTO —, consultada por Credito pela sua própria ACL (ADR-0004) e congelada no
+ContextoDecisaoCredito. É insumo da PoliticaCredito, e não produto do contexto Risco: não se confunde
+com AvaliacaoRisco nem com ResultadoAvaliacaoRisco, que são processamento especializado, caro e
+assíncrono. Não é apresentada ao GerenteRelacionamento: é insumo interno da política, e o que a
+decisão comunica é o MotivoDecisaoCredito, nunca a gradação.
+_Evitar_: Score, Rating, ResultadoAvaliacaoRisco, Risco do cliente
+
+**DadosCreditoCore**:
+Os fatos de crédito lidos do CoreLegado numa única consulta — LimiteChequeEspecialVigente,
+situacaoConta e ClassificacaoRiscoCreditoBase —, junto com o instante da consulta e a identificação
+da fonte. Existe para que a procedência dentro do ContextoDecisaoCredito seja registrada uma vez
+para o conjunto, e não repetida campo a campo.
+_Evitar_: Snapshot do Core, Dados do cliente, Payload do Core
 
 **PoliticaCredito**:
 Conjunto fictício de regras que classifica uma SolicitacaoAumentoLimite. É versionada, porque toda
@@ -166,6 +210,14 @@ de decisão humana. Registra autor, instante, motivo, política aplicada, evidê
 humana, a AlcadaAplicada.
 _Evitar_: Aprovação, Resultado, Deferimento
 
+**MotivoDecisaoCredito**:
+Código estável que diz por que a DecisaoCredito foi o que foi. É vocabulário do domínio, e nunca
+frase de interface: o texto apresentado ao GerenteRelacionamento pertence ao app-gerente. Motivos de
+rejeição não são intercambiáveis — FORA_DA_POLITICA_AUTOMATICA afirma apenas que a versão vigente da
+PoliticaCredito não concede automaticamente aquela solicitação, e não que o Cliente tenha risco ruim
+ou seja inelegível.
+_Evitar_: Mensagem, Descrição da recusa, Erro
+
 **AlcadaAprovacao**:
 Autoridade para decidir uma solicitação, medida simultaneamente em dois eixos: o LimiteSolicitado
 absoluto e o IncrementoSolicitado. Autoriza; não roteia (ADR-0008).
@@ -189,19 +241,32 @@ _Evitar_: Alçada do aprovador, Nível de aprovação
 
 **EfetivacaoLimite**:
 Aplicação de uma DecisaoCredito aprovada no CoreLegado. Só após a confirmação do Core o
-LimiteSolicitado se torna o LimiteChequeEspecialVigente (ADR-0002, ADR-0009).
+LimiteSolicitado se torna o LimiteChequeEspecialVigente (ADR-0002, ADR-0009). A instrução leva o
+LimiteChequeEspecialVigente sobre o qual a decisão foi tomada como precondição: se o Core já não
+estiver nesse estado, a alteração não é aplicada silenciosamente por cima.
 _Evitar_: Aprovação, Conclusão, Aplicação
+
+**EfetivacaoId**:
+Identidade de negócio da tentativa lógica de efetivação, criada por Credito quando a intenção é
+registrada duravelmente, e estável por toda a vida dela. É a chave de idempotência perante o
+CoreLegado — reenviar a mesma instrução não aplica a alteração duas vezes — e permite recuperar o
+resultado quando o aceite se perdeu antes de o ProtocoloCore ser conhecido. Não é o identificador
+da mensagem no Outbox, que é técnico e pode mudar a cada reenvio.
+_Evitar_: messageId, Id da mensagem, Id técnico da efetivação
 
 **ProtocoloCore**:
 Identificador devolvido pelo CoreLegado ao aceitar uma instrução de EfetivacaoLimite. É o que
 permite perguntar depois "o que aconteceu com aquela instrução": o callback o traz de volta, e a
-reconciliação consulta o status por ele quando o callback não chega (ADR-0009).
+reconciliação consulta o status por ele quando o callback não chega (ADR-0009). Pode existir sem ser
+conhecido por Credito, quando a resposta de aceite se perde; nesse caso a recuperação é pelo
+EfetivacaoId.
 _Evitar_: Protocolo, Id da transação, Ticket
 
 ## Risco
 
 Supporting domain. Contexto especializado em avaliar risco, que **não aprova crédito**: produz
-informação para que Credito prossiga.
+informação para que Credito prossiga. Não se confunde com a ClassificacaoRiscoCreditoBase, que é
+insumo simples e pré-existente do CoreLegado consultado por Credito.
 
 **AvaliacaoRisco**:
 Processamento automatizado, mais caro e assíncrono, acionado quando o MotorDecisaoCredito não
@@ -268,5 +333,9 @@ que introduzir o contexto.
 Metadado de negócio no envelope de toda mensagem. O `correlationId` identifica a **jornada de
 negócio**, que atravessa HTTP, Outbox, RabbitMQ, Kafka, callback e reconciliação por horas ou dias;
 o `causationId` identifica a mensagem imediatamente anterior que causou esta. Nenhum dos dois é
-`traceId`, que é execução técnica e tem outro ciclo de vida (ADR-0017). Mensagens carregam também
-`atorId` e `tipoAtor` como metadado de auditoria — jamais token ou credencial (ADR-0015).
+`traceId`, que é execução técnica e tem outro ciclo de vida (ADR-0017). O `correlationId` de uma
+jornada de crédito nasce em Credito, no instante em que a SolicitacaoAumentoLimite é efetivamente
+criada, e não na borda web: o `bff-gerente` participa do trace técnico, mas não é dono do processo.
+Também não é a Idempotency-Key, que identifica uma tentativa de submissão, e não a jornada.
+Mensagens carregam também `atorId` e `tipoAtor` como metadado de auditoria — jamais token ou
+credencial (ADR-0015).

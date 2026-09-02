@@ -45,3 +45,16 @@ Detalhes de contrato pertencem à spec do slice que os introduz, não a rodadas 
 antecipado: nomes definitivos de endpoints, schemas JSON, constraints SQL, campos do Outbox e
 estratégia de idempotency key são decididos no slice. Esse limite existe para impedir que discovery
 vire Big Design Up Front.
+
+## Emenda — 2026-09-02: `EFETIVACAO_INDETERMINADA` entra no slice 1
+
+O grilling do slice 1 exercitou um cenário que a lista acima não previa: o Core aceita a instrução, a
+resposta de aceite se perde, o callback não chega e as consultas de reconciliação falham. Não há
+evidência de que a efetivação tenha falhado — o limite pode ter sido alterado —, e concluir
+`FALHA_EFETIVACAO` gravaria um fato possivelmente falso.
+
+Por isso `EFETIVACAO_INDETERMINADA` passa a integrar o `StatusSolicitacaoAumentoLimite` do slice 1,
+como estado não terminal (ADR-0009, emenda de 2026-09-02). Isso não contraria a regra desta
+decisão — a reforça: o estado entra porque um comportamento deste slice o exige, e não porque alguém
+antecipou o workflow futuro. `EM_AVALIACAO_RISCO`, `AGUARDANDO_PARECER` e `AGUARDANDO_APROVACAO`
+continuam não existindo.
