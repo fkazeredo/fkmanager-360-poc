@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.fkmanager360</groupId>
+    <artifactId>fkmanager-360-poc</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>fkmanager-360-poc</name>
+    <description>
+        Agregador Maven. Reune apenas os modulos JVM deste slice; app-gerente (Angular) fica fora,
+        como projeto npm proprio. Importa spring-boot-dependencies por dependencyManagement, nao por
+        heranca de spring-boot-starter-parent, para que extrair um modulo para repositorio proprio
+        continue sendo movimento mecanico (ADR-0011).
+    </description>
+
+    <!--
+        #0001 materializa apenas os deployables que o comportamento vertical exige (ADR-0010):
+        servidor-autorizacao, servico-carteira-clientes e sua migracao, bff-gerente e
+        simulador-core-legado. servico-credito e os demais nascem em tickets futuros.
+    -->
+    <modules>
+        <module>src/fk-servidor-autorizacao</module>
+        <module>src/fk-servico-carteira-clientes</module>
+        <module>src/fk-bff-gerente</module>
+        <module>src/fk-simulador-core-legado</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.release>25</maven.compiler.release>
+        <spring-boot.version>4.1.1</spring-boot.version>
+        <archunit.version>1.5.0</archunit.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!--
+                    Sem heranca de spring-boot-starter-parent, o goal repackage nao se liga
+                    sozinho a fase package: a execucao precisa ser declarada aqui, uma vez,
+                    para que cada modulo so precise referenciar o plugin (ADR-0011).
+                -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                        <parameters>true</parameters>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

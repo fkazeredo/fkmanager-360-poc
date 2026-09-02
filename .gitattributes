@@ -1,0 +1,23 @@
+# Host de desenvolvimento e Windows; as imagens Docker sao Linux. Scripts e artefatos que entram
+# em imagem precisam de LF, ou o build de imagem quebra silenciosamente com CRLF.
+* text=auto eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+mvnw text eol=lf
+mvnw.cmd text eol=crlf
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary

@@ -1,0 +1,22 @@
+<header class="cabecalho">
+  <h1>fk-manager 360</h1>
+  @if (session.gerenteId(); as gerenteId) {
+    <div class="usuario">
+      <span>{{ gerenteId }}</span>
+      <button type="button" (click)="session.logout()">Sair</button>
+    </div>
+  }
+</header>
+
+<main>
+  @if (session.loading()) {
+    <p>Carregando...</p>
+  } @else if (session.gerenteId()) {
+    <app-carteira-lista />
+  } @else {
+    <section class="login">
+      <p>Voce precisa entrar para acessar sua carteira de clientes.</p>
+      <button type="button" (click)="session.login()">Entrar</button>
+    </section>
+  }
+</main>

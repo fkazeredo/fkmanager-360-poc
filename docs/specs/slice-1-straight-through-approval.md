@@ -247,12 +247,14 @@ de cada solicitação.
 
 `app-gerente` (Angular 22), `bff-gerente`, `servidor-autorizacao`, `servico-carteira-clientes`,
 `servico-credito`, `simulador-core-legado`, PostgreSQL com databases separados por contexto, Redis para a
-sessão do BFF, e um executor one-shot de migrations. Docker Compose é o contrato oficial de execução
-integrada (ADR-0013). `servico-risco`, `servico-movimentacoes`, `batch-movimentacoes`, `servico-auditoria`
-e `servico-notificacoes` **não** são criados.
+sessão do BFF. Docker Compose é o contrato oficial de execução integrada (ADR-0013). `servico-risco`,
+`servico-movimentacoes`, `batch-movimentacoes`, `servico-auditoria` e `servico-notificacoes` **não** são
+criados.
 
 Cada serviço se organiza em domínio, aplicação e adapters, com a dependência apontando para dentro
-(ADR-0020). Migrations são etapa explícita de deployment; nenhuma aplicação tem DDL em runtime (ADR-0014).
+(ADR-0020). Migrations são versionadas e aplicadas de forma determinística antes do serviço aceitar
+tráfego; cada contexto decide, por si, entre executor de deployment separado e Flyway embutido com
+credencial de DDL distinta da credencial de runtime da aplicação (ADR-0014, emenda 2026-09-02).
 
 ### Autenticação, sessão e delegação
 
@@ -917,7 +919,9 @@ Cada critério indica onde a propriedade é melhor falsificada; a lista **não**
   `bff-gerente` a partir de `servico-carteira-clientes` e `servico-credito`; o BFF não emite nenhuma
   chamada ao `simulador-core-legado`; `servico-carteira-clientes` não expõe nem conhece
   `LimiteChequeEspecial`; e `servico-credito` não devolve dados cadastrais do `Cliente` que pertencem a
-  `CarteiraClientes`. A ausência de dependência Java direta entre os contextos é coberta por S8.
+  `CarteiraClientes`. A ausência de dependência Java direta entre os contextos é garantida pela
+  separação em módulos Maven distintos, sem dependência declarada entre eles (ADR-0011); S8 reforça,
+  dentro de cada módulo, que a própria estrutura interna daquele serviço respeita a mesma direção.
 - **AC31 — Nova manifestação legítima com os mesmos valores** (S2+S3+S6): dada uma solicitação anterior
   em estado terminal para a mesma conta, uma nova submissão com **os mesmos valores** e uma
   `Idempotency-Key` nova cria uma **nova** `SolicitacaoAumentoLimite`. É a asserção que justifica ter
@@ -990,9 +994,9 @@ simulador e os números concretos dos `COD-RET`; número exato de tentativas de 
 forma física do registro de histórico e do registro de idempotência.
 
 **Materialização de glossário.** Quando `Credito` e `CarteiraClientes` forem materializados em código, seu
-vocabulário migra do `CONTEXT.md` raiz para `src/<contexto>/CONTEXT.md`, conforme `CONTEXT-MAP.md` e
-`docs/agents/domain.md`. Esta spec é o gatilho dessa migração; ela não deve acontecer antecipadamente nem criar
-arquivos vazios.
+vocabulário migra do `CONTEXT.md` raiz para `docs/contextos/<contexto>/CONTEXT.md`, conforme `CONTEXT-MAP.md`
+e `docs/agents/domain.md`. Esta spec é o gatilho dessa migração; ela não deve acontecer antecipadamente nem
+criar arquivos vazios.
 
 ## Log
 

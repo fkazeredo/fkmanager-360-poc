@@ -50,3 +50,16 @@ apresentada como contagem de contextos.
 Como cada processo é fronteira de execução, ele é também fronteira de identidade e de privilégio:
 processo novo tem identidade técnica própria (ADR-0015) e credencial de banco própria quando acessa
 um (ADR-0014).
+
+## Emenda — 2026-09-02: infraestrutura de execução é sempre Docker, nunca instalação nativa
+
+Banco, broker, cache e demais ferramentas operacionais necessárias à execução local ou integrada são
+fornecidos por Docker e orquestrados pelo Compose — nunca instalados nativamente como requisito do
+projeto. Vale para PostgreSQL, Redis, RabbitMQ, Kafka, o OpenTelemetry Collector, Prometheus, Grafana,
+Tempo, Loki e qualquer dependência externa futura. A máquina do desenvolvedor precisa fundamentalmente
+de Git, Docker, a toolchain JVM de desenvolvimento e Node/npm quando o trabalho tocar `app-gerente` —
+nada além disso é pré-requisito de ambiente.
+
+Isto não afrouxa esta decisão nem ADR-0010: a existência futura desses componentes não autoriza
+antecipá-los. ADR-0010 continua governando *quando* cada um nasce — no primeiro comportamento que
+realmente o exige. Docker é sempre o transporte; a infraestrutura em si só aparece quando necessária.
