@@ -15,10 +15,11 @@ Os termos estão agrupados por bounded context (ADR-0003). Um mesmo conceito pod
 de um contexto com significado próprio — `ContaCorrente` em `CarteiraClientes` não é a mesma coisa
 que em `Movimentacoes`, e isso é deliberado.
 
-O mapa dos contextos — responsabilidades, relações e papel estratégico de cada um — está em
-`CONTEXT-MAP.md`, na raiz. Enquanto nenhum contexto foi materializado em código, este arquivo é o
-glossário consolidado; quando um contexto for materializado, seu vocabulário se move para o
-`CONTEXT.md` do próprio contexto, conforme `docs/agents/domain.md`.
+O mapa dos contextos — responsabilidades, relações, papel estratégico e estado de materialização de
+cada um — está em `CONTEXT-MAP.md`, na raiz. Para um contexto ainda não materializado, este arquivo
+é o glossário; para um já materializado, seu vocabulário específico vive em
+`src/<contexto>/CONTEXT.md`, conforme `docs/agents/domain.md`. **Atores**, abaixo, é vocabulário
+compartilhado e por isso permanece aqui mesmo depois de um contexto materializar.
 
 ## Atores
 
@@ -71,33 +72,12 @@ _Evitar_: Mainframe, Legado, Backend
 
 ## IdentidadeEAcesso
 
-Contexto responsável por autenticar o ator e emitir as credenciais de acesso da plataforma. Seu
+Materializado (ticket #0001). Vocabulário próprio em `src/identidade-e-acesso/CONTEXT.md`. Seu
 vocabulário de negócio é o da seção **Atores** acima: os papéis reconhecidos pelo sistema.
-
-Este contexto conhece identidade, autenticação e papéis organizacionais grossos. **Autoridade
-financeira não mora aqui**: `PerfilAlcadaAprovacao` e `AtribuicaoAlcada` pertencem a Credito, e
-alçada nunca viaja em claim de token (ADR-0015). Scope responde se aquela identidade pode tentar
-acessar uma capacidade; o domínio responde se aquela operação específica é permitida.
 
 ## CarteiraClientes
 
-Contexto responsável por responder quem é o cliente, quais contas ele possui, e qual gerente tem
-direito de atendê-lo: cadastro, vínculo e relacionamento — os dados de que a experiência do gerente
-precisa para chegar até a conta certa.
-
-**Não é dono do LimiteChequeEspecial nem de nenhum outro dado financeiro da conta.** O
-LimiteChequeEspecialVigente é consultado por Credito, pela ACL própria daquele contexto (ADR-0004).
-Quando uma tela precisar exibir cliente, conta e limite ao mesmo tempo, quem compõe é o
-`bff-gerente`, e o resultado é modelo de apresentação — não agregado, não contexto (ADR-0013).
-
-**CarteiraClientes**:
-Conjunto de Clientes sob responsabilidade de um GerenteRelacionamento. A associação pertence ao
-fk-manager-360; os dados mestres do Cliente, não.
-_Evitar_: Base de clientes, Book, Portfólio
-
-**ContaCorrente**:
-Conta de um Cliente. Neste contexto é essencialmente a conta que pertence a determinado Cliente e
-que determinado gerente tem direito de atender.
+Materializado (ticket #0001). Vocabulário próprio em `src/carteira-clientes/CONTEXT.md`.
 
 ## Credito
 

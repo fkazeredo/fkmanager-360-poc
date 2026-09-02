@@ -24,9 +24,8 @@ Responde quem é o ator, autentica-o e emite as credenciais de acesso da platafo
 identidade, autenticação e papéis organizacionais grossos; **não** conhece política de negócio —
 `PerfilAlcadaAprovacao` e `AtribuicaoAlcada` pertencem a `Credito`, não a este contexto (ADR-0015).
 
-Seu deployable previsto é o `servidor-autorizacao` (ADR-0013), ainda não materializado: o nome é de
-Authorization Server porque é isso que ele faz, e o bounded context continua sendo
-`IdentidadeEAcesso`.
+Materializado pelo ticket #0001 como `servidor-autorizacao` (ADR-0013): o nome é de Authorization
+Server porque é isso que ele faz, e o bounded context continua sendo `IdentidadeEAcesso`.
 
 ### CarteiraClientes
 
@@ -101,14 +100,15 @@ Promovê-las a contexto inflaria o mapa e ensinaria exatamente a coisa errada.
 
 ## Materialização em código
 
-**Nenhum contexto está materializado em código hoje** — não existe `src/` neste repositório.
-Modelo e infraestrutura só aparecem quando uma spec os exige (ADR-0010), e este mapa **não cria
-diretórios, serviços ou scaffolding** para acomodar documentação futura.
+`IdentidadeEAcesso` e `CarteiraClientes` foram materializados pelo ticket #0001; os demais
+continuam apenas documentados. Modelo e infraestrutura só aparecem quando uma spec os exige
+(ADR-0010), e este mapa **não cria diretórios, serviços ou scaffolding** para acomodar documentação
+futura.
 
 | Contexto | Materializado | Observação |
 | --- | --- | --- |
-| `IdentidadeEAcesso` | não | Exercitado pelo slice 1 (autenticação do gerente). Seu vocabulário de negócio é o dos Atores; autoridade financeira pertence a `Credito`. |
-| `CarteiraClientes` | não | Exercitado pelo slice 1. |
+| `IdentidadeEAcesso` | sim (`src/identidade-e-acesso/`) | Ticket #0001 (slice 1). Vocabulário de negócio é o dos Atores, que continua no `CONTEXT.md` raiz por ser compartilhado; autoridade financeira pertence a `Credito`. |
+| `CarteiraClientes` | sim (`src/carteira-clientes/`) | Ticket #0001 (slice 1). |
 | `Credito` | não | Exercitado pelo slice 1; é o contexto com vocabulário mais desenvolvido. |
 | `Risco` | não | Entra quando uma spec introduzir decisão que o `MotorDecisaoCredito` não conclui. |
 | `Movimentacoes` | não | Previsto para o slice 4; vocabulário provisório. |

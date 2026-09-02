@@ -9,10 +9,11 @@ point: it lists the bounded contexts (`IdentidadeEAcesso`, `CarteiraClientes`, `
 `Movimentacoes`), their responsibilities, their relations, and which of them are cross-cutting
 capabilities rather than contexts.
 
-The repo is **in transition**. No context has been materialised in code yet — there is no `src/` —
-so the per-context `CONTEXT.md` files described below do not exist. Until they do, the root
-`CONTEXT.md` is the consolidated glossary for every context, with terms grouped by context.
-`CONTEXT-MAP.md` records this and says when each context's vocabulary moves out.
+The repo is **in transition**. `IdentidadeEAcesso` and `CarteiraClientes` were materialised by
+ticket #0001 and have their own `src/<context>/CONTEXT.md`; `Credito`, `Risco` and `Movimentacoes`
+have not, so their vocabulary still lives in the root `CONTEXT.md`, grouped by context.
+`CONTEXT-MAP.md` records which is which and says when each remaining context's vocabulary moves
+out.
 
 ## Before exploring, read these
 
@@ -37,25 +38,29 @@ Current state of this repo:
 ```
 /
 ├── CONTEXT-MAP.md                     ← entry point: the contexts and their relations
-├── CONTEXT.md                         ← consolidated glossary, grouped by context (transitional)
-└── docs/adr/                          ← system-wide decisions
-    ├── 0001-linguagem-ubiqua-em-portugues.md
-    └── ...
+├── CONTEXT.md                         ← consolidated glossary for unmaterialised contexts
+├── docs/adr/                          ← system-wide decisions
+└── src/
+    ├── identidade-e-acesso/
+    │   └── CONTEXT.md                 ← materialised by #0001
+    └── carteira-clientes/
+        └── CONTEXT.md                 ← materialised by #0001
 ```
 
-Target state, reached one context at a time as specs materialise them:
+Target state, reached one remaining context at a time as specs materialise them:
 
 ```
 /
 ├── CONTEXT-MAP.md
 ├── docs/adr/                          ← system-wide decisions
 └── src/
-    ├── credito/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── carteira-clientes/
+    ├── identidade-e-acesso/
+    │   └── CONTEXT.md
+    ├── carteira-clientes/
+    │   └── CONTEXT.md
+    └── credito/
         ├── CONTEXT.md
-        └── docs/adr/
+        └── docs/adr/                  ← context-specific decisions, when one exists
 ```
 
 ## Use the glossary's vocabulary
