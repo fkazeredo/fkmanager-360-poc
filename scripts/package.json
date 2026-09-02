@@ -1,0 +1,12 @@
+{
+  "name": "fkmanager-360-scripts",
+  "private": true,
+  "description": "Scripts de suporte ao repositorio (fora do Maven reactor e do Angular). Nao e um deployable.",
+  "type": "module",
+  "scripts": {
+    "validar-openapi": "node validar-openapi.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

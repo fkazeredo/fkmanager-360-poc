@@ -22,6 +22,6 @@ The five canonical triage roles, each label string equal to its role name. See `
 
 ### Domain docs
 
-Multi-context: `CONTEXT-MAP.md` at the root is the entry point. `IdentidadeEAcesso` and `CarteiraClientes` are materialised (`src/<context>/CONTEXT.md`); remaining contexts stay in the root `CONTEXT.md`. ADRs live in `docs/adr/`. See `docs/agents/domain.md`.
+Multi-context: `CONTEXT-MAP.md` at the root is the entry point. `IdentidadeEAcesso` and `CarteiraClientes` are materialised (`docs/contextos/<context>/CONTEXT.md`); remaining contexts stay in the root `CONTEXT.md`. ADRs live in `docs/adr/`. See `docs/agents/domain.md`.
 
 Naming in code: domain language (PT-BR) vs. technical/engineering terminology (English) — see `docs/agents/domain.md`.

@@ -11,9 +11,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
@@ -84,6 +86,21 @@ public class SecurityConfig {
                 .addFilterAfter(new ForceCsrfResolutionFilter(), BasicAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * Sem este bean, o Spring Security nao encontra nenhum {@link OAuth2AuthorizedClientRepository}
+     * nem {@code OAuth2AuthorizedClientService} explicito no contexto e cai no proprio default
+     * (verificado em {@code OAuth2ClientConfigurerUtils}): um {@code InMemoryOAuth2AuthorizedClientService},
+     * vivo só no processo. O login (via {@code SPRING_SECURITY_CONTEXT}) sobrevive a restart
+     * porque o Spring Session ja serializa isso; o access/refresh token do login e o token trocado
+     * para servico-carteira-clientes (ADR-0015) nao sobreviveriam -- exatamente o que o AC20 exige.
+     * {@link HttpSessionOAuth2AuthorizedClientRepository} guarda como atributo de sessao, entao
+     * segue o mesmo backing store Redis que o resto da sessao (application.yml).
+     */
+    @Bean
+    OAuth2AuthorizedClientRepository authorizedClientRepository() {
+        return new HttpSessionOAuth2AuthorizedClientRepository();
     }
 
     private static CookieCsrfTokenRepository csrfTokenRepository() {

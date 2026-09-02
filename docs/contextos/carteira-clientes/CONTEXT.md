@@ -27,6 +27,6 @@ que determinado gerente tem direito de atender. Não é a mesma coisa que `Conta
 `Movimentacoes` (vocabulário ainda provisório, no `CONTEXT.md` raiz) — ali é referência para
 lançamentos, períodos, saldos e reconciliação.
 
-Deployables: `servico-carteira-clientes` e `migracoes-carteira-clientes` (executor one-shot de
-migrations, ADR-0014). `bff-gerente` e `app-gerente` não são bounded context — são fronteira web e
-apresentação (`CONTEXT-MAP.md`).
+Deployable: `fk-servico-carteira-clientes`. Migrations são embutidas no próprio serviço (Flyway,
+ADR-0014 emendada) — não existe deployable separado para elas. `fk-bff-gerente` e `fk-app-gerente`
+não são bounded context — são fronteira web e apresentação (`CONTEXT-MAP.md`).

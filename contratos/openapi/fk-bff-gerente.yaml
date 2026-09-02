@@ -1,0 +1,171 @@
+openapi: 3.0.3
+info:
+  title: fk-bff-gerente
+  description: >-
+    Backend-for-frontend do GerenteRelacionamento. Fronteira web -- nao e bounded context
+    (CONTEXT-MAP.md). Conduz Authorization Code + PKCE + OIDC contra fk-servidor-autorizacao,
+    mantem a sessao em Redis via Spring Session e expoe ao app-gerente somente o que o Angular
+    precisa: identidade da sessao corrente e a composicao de tela sobre CarteiraClientes. Nenhum
+    access token ou refresh token atravessa esta fronteira para o browser (AC19).
+  version: "0001"
+servers:
+  - url: /bff
+    description: Origem publica atras do nginx (docker compose), TLS local.
+tags:
+  - name: sessao
+    description: Identidade da sessao corrente, sem expor token.
+  - name: carteira
+    description: Composicao de tela sobre CarteiraClientes (proxy autenticado com Token Exchange).
+paths:
+  /api/sessao:
+    get:
+      operationId: consultarSessaoAtual
+      tags: [sessao]
+      summary: Identidade do GerenteRelacionamento autenticado na sessao corrente
+      description: >-
+        O suficiente para o Angular saber quem esta logado sem inspecionar o cookie de sessao,
+        que e HttpOnly e portanto inacessivel a JavaScript.
+      security:
+        - cookieSessao: []
+      responses:
+        "200":
+          description: Sessao autenticada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "401":
+          description: Sem sessao autenticada (sem cookie, ou cookie invalido/expirado).
+  /api/carteira/clientes:
+    get:
+      operationId: listarClientesDaCarteira
+      tags: [carteira]
+      summary: Pagina da CarteiraClientes do gerente autenticado
+      description: >-
+        Proxy autenticado para fk-servico-carteira-clientes: o BFF obtem por Token Exchange um
+        token com audience restrita a servico-carteira-clientes (ADR-0015) e repassa a chamada.
+        O BFF nunca fala com fk-simulador-core-legado (AC30) nem reimplementa a autorizacao de
+        recurso, que pertence ao servico dono (ADR-0007) -- um 403 de CarteiraClientes so
+        atravessa.
+      security:
+        - cookieSessao: []
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Pagina zero-based.
+        - name: tamanho
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Tamanho de pagina. Limite e o mesmo de fk-servico-carteira-clientes.
+      responses:
+        "200":
+          description: Pagina da carteira do gerente autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientesPageResponse"
+        "401":
+          description: Sem sessao autenticada.
+        "403":
+          description: >-
+            Sem direito de atendimento atual -- 403 de fk-servico-carteira-clientes repassado sem
+            alteracao (o BFF nao decide autorizacao de recurso).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: fk-servico-carteira-clientes indisponivel ou inalcancavel no momento.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /logout:
+    post:
+      operationId: encerrarSessao
+      tags: [sessao]
+      summary: Encerra a sessao corrente e invalida o cookie
+      description: >-
+        Endpoint padrao do Spring Security. Escrita real, portanto sujeita a CSRF (AC20): exige o
+        token do cookie XSRF-TOKEN ecoado no header X-XSRF-TOKEN.
+      security:
+        - cookieSessao: []
+      responses:
+        "204":
+          description: Sessao encerrada; cookie de sessao invalidado.
+        "403":
+          description: Token CSRF ausente ou invalido.
+components:
+  securitySchemes:
+    cookieSessao:
+      type: apiKey
+      in: cookie
+      name: SESSION
+      description: >-
+        Cookie de sessao opaco (Spring Session/Redis), HttpOnly, Secure, SameSite=Lax. Nunca
+        carrega access token ou refresh token -- eles ficam no OAuth2AuthorizedClientRepository,
+        server-side.
+  schemas:
+    SessionResponse:
+      type: object
+      required: [gerenteId]
+      properties:
+        gerenteId:
+          type: string
+          description: Identificador do GerenteRelacionamento autenticado (claim sub do id_token).
+          example: gerente.a
+    ClienteResumo:
+      type: object
+      required: [clienteId, nome, cpfMascarado]
+      properties:
+        clienteId:
+          type: string
+        nome:
+          type: string
+        cpfMascarado:
+          type: string
+          example: "***.456.789-**"
+    ClientesPageResponse:
+      type: object
+      required: [itens, pagina, tamanho, totalElementos, totalPaginas]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClienteResumo"
+        pagina:
+          type: integer
+        tamanho:
+          type: integer
+        totalElementos:
+          type: integer
+          format: int64
+        totalPaginas:
+          type: integer
+          format: int64
+    ProblemDetail:
+      type: object
+      description: RFC 7807 (org.springframework.http.ProblemDetail).
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri

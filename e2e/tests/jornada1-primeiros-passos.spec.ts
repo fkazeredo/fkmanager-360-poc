@@ -1,5 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
+import { execSync } from 'node:child_process';
+import path from 'node:path';
 import { readDemoCredentials } from './demo-credentials';
+
+const repoRoot = path.resolve(__dirname, '..', '..');
 
 /**
  * S7: harness Playwright contra a stack real do Compose (F7), sem bypass de seguranca. Estas
@@ -135,5 +139,66 @@ test.describe('Jornada 1 -- primeiros passos', () => {
 
     const sessaoDepoisDoLogout = await page.request.get('/bff/api/sessao');
     expect(sessaoDepoisDoLogout.status()).toBe(401);
+  });
+
+  /**
+   * AC20: a sessao sobrevive ao restart da instancia do bff-gerente que a originou. Redis real
+   * sendo o backing store (S6, BffSegurancaTest) e evidencia forte mas indireta -- so um restart
+   * de verdade prova que nenhum estado sobrevive apenas na instancia antiga. `docker compose
+   * restart` (nao `up --force-recreate`) e deliberado: mantem Redis vivo e derruba/sobe somente
+   * o processo do bff-gerente, exatamente o cenario do AC. Sem sleep fixo: `expect.poll` reage
+   * ao healthcheck real (o mesmo endpoint que o Compose usa para orquestrar depends_on).
+   */
+  test('AC20: a sessao sobrevive ao restart da instancia do bff-gerente que a originou', async ({
+    page,
+    context,
+  }) => {
+    const respostasComToken: string[] = [];
+    page.on('response', (resposta) => {
+      if (!resposta.url().includes('/bff/')) return;
+      resposta
+        .text()
+        .then((corpo) => {
+          if (/access_token|refresh_token/i.test(corpo)) {
+            respostasComToken.push(resposta.url());
+          }
+        })
+        .catch(() => {
+          // corpo binario ou ja consumido -- nao e onde um token JSON apareceria
+        });
+    });
+
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
+
+    const cookiesAntes = await context.cookies();
+    const sessaoAntes = cookiesAntes.find((c) => c.name === 'SESSION');
+    expect(sessaoAntes, 'login deveria ter estabelecido um cookie de sessao').toBeTruthy();
+
+    execSync('docker compose restart bff-gerente', { cwd: repoRoot, stdio: 'pipe' });
+
+    // O restart derruba a instancia; ate a nova responder, /bff/ fica inalcancavel pelo nginx --
+    // por isso failOnStatusCode:false (uma resposta de erro de proxy tambem e "ainda nao pronto").
+    await expect
+      .poll(
+        async () => {
+          const resposta = await page.request.get('/bff/actuator/health', { failOnStatusCode: false });
+          return resposta.status();
+        },
+        { timeout: 60_000, intervals: [500] },
+      )
+      .toBe(200);
+
+    // Mesmo cookie, nenhum novo login: se a sessao so existisse na instancia derrubada, isto
+    // voltaria 401 e o teste falharia aqui.
+    const sessaoDepoisDoRestart = await page.request.get('/bff/api/sessao');
+    expect(sessaoDepoisDoRestart.status()).toBe(200);
+    expect(await sessaoDepoisDoRestart.json()).toEqual({ gerenteId: credentials['gerente.a'].login });
+
+    // A carteira tambem responde sem re-login, na mesma pagina/context que autenticou antes do restart.
+    await page.reload();
+    await expect(page.locator('.lista-clientes li').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Entrar' })).not.toBeVisible();
+
+    expect(respostasComToken).toEqual([]);
   });
 });

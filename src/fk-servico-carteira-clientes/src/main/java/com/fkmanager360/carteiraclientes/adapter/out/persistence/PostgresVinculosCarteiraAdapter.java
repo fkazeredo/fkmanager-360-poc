@@ -12,8 +12,9 @@ import java.util.List;
 
 /**
  * Adapter de saida sobre o armazenamento privado de CarteiraClientes (ADR-0014). A aplicacao nao
- * cria schema em runtime -- as migrations sao aplicadas antes, pelo executor one-shot
- * (ADR-0014) -- este adapter so le e escreve linhas.
+ * cria schema em runtime -- as migrations sao aplicadas por Flyway embutido no proprio boot, com
+ * credencial de DDL separada da credencial de DML deste adapter (ADR-0014, emenda 2026-09-02) --
+ * este adapter so le e escreve linhas.
  */
 @Repository
 public class PostgresVinculosCarteiraAdapter implements VinculosCarteiraPort {

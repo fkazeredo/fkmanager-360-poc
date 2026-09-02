@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.server.authorization.settings.ClientS
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 
 import java.time.Duration;
+import java.util.Set;
 
 /**
  * O unico client registrado neste ticket: {@code bff-gerente}, confidencial, conduzindo
@@ -48,6 +49,11 @@ public class RegisteredClientsConfig {
                         // PKCE obrigatorio: sem isto, o ticket nao terminou.
                         .requireProofKey(true)
                         .requireAuthorizationConsent(false)
+                        // Allow-list de Token Exchange (ADR-0015): bff-gerente so pode trocar por
+                        // token com este destino. Lido por
+                        // TokenExchangeAudienceAllowListAuthenticationProvider antes da emissao.
+                        .setting(TokenExchangeAudienceAllowListAuthenticationProvider.ALLOWED_TARGETS_SETTING,
+                                Set.of("servico-carteira-clientes"))
                         .build())
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenTimeToLive(Duration.ofMinutes(5))

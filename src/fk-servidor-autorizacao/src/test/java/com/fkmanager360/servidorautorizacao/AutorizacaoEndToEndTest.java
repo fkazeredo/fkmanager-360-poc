@@ -204,4 +204,41 @@ class AutorizacaoEndToEndTest {
         assertThat(claims.getSubject()).isEqualTo("gerente.a");
         assertThat((List<String>) claims.getClaim("papeis")).containsExactly("GERENTE_RELACIONAMENTO");
     }
+
+    /**
+     * ADR-0015: audience-restriction e controle do emissor, nao so do Resource Server. Sem o
+     * allow-list de {@code TokenExchangeAudienceAllowListAuthenticationProvider}, este pedido
+     * teria devolvido 200 com {@code aud=servico-credito} -- nenhum servico-credito precisa
+     * existir para provar a lacuna nem a correcao.
+     */
+    @Test
+    void tokenExchange_paraTargetNaoAutorizado_eRecusadoComInvalidTarget_semEmitirToken() throws Exception {
+        String codeVerifier = gerarCodeVerifier();
+        String codeChallenge = desafioS256(codeVerifier);
+        String code = obterCodigoDeAutorizacao(codeChallenge);
+
+        MvcResult loginTokenResult = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+                        .param("grant_type", "authorization_code")
+                        .param("code", code)
+                        .param("redirect_uri", REDIRECT_URI)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String accessToken = JsonPath.read(loginTokenResult.getResponse().getContentAsString(), "$.access_token");
+
+        MvcResult exchangeResult = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", accessToken)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("audience", "servico-credito"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        String corpo = exchangeResult.getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_target");
+        assertThat(corpo).doesNotContain("access_token");
+    }
 }

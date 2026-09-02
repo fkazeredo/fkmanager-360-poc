@@ -3,8 +3,11 @@ spring:
     name: fk-bff-gerente
   session:
     store-type: redis
-    redis:
-      namespace: bff-gerente:session
+    # Prefixo correto e "spring.session.data.redis.*", nao "spring.session.redis.*" (este ultimo
+    # e silenciosamente ignorado -- nenhuma validacao acusa propriedade desconhecida por padrao).
+    data:
+      redis:
+        namespace: bff-gerente:session
   data:
     redis:
       host: ${REDIS_HOST:localhost}

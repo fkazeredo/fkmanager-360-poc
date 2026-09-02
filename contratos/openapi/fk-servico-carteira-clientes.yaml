@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: fk-servico-carteira-clientes
+  description: >-
+    Resource Server do bounded context CarteiraClientes: autoridade sobre a associacao atual
+    GerenteRelacionamento-Cliente. Neste ticket (#0001), expoe a listagem paginada da carteira do
+    gerente autenticado, composta com os dados mestres do Cliente lidos de
+    fk-simulador-core-legado pela ACL propria deste contexto (ADR-0004). Nao e fachada financeira:
+    nao conhece LimiteChequeEspecial (ADR-0004, AC30).
+  version: "0001"
+servers:
+  - url: http://localhost:8081
+    description: Rede interna do Docker Compose (nome de servico), porta exposta localmente para dev.
+tags:
+  - name: carteira
+    description: Leitura da CarteiraClientes do gerente autenticado.
+paths:
+  /carteira/clientes:
+    get:
+      operationId: listarClientesDaCarteira
+      tags: [carteira]
+      summary: Pagina de Clientes da CarteiraClientes do gerente autenticado
+      description: >-
+        O gerenteId vem do claim sub do token bearer ja validado pela borda (issuer + audience);
+        este endpoint nao reimplementa autenticacao (AC22, ADR-0007).
+      security:
+        - bearerJwt: [carteira.leitura]
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Pagina zero-based.
+        - name: tamanho
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Tamanho de pagina (1-100).
+      responses:
+        "200":
+          description: Pagina da carteira do gerente autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientesPageResponse"
+        "400":
+          description: Parametro de paginacao invalido (pagina negativa, ou tamanho fora de 1-100).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: >-
+            Sem token, token expirado, assinatura invalida, issuer incorreto ou audience
+            incorreta (AC21).
+        "403":
+          description: >-
+            Token valido mas sem o scope carteira.leitura ou sem o papel GERENTE_RELACIONAMENTO
+            (ADR-0015: scope e papel sao perguntas distintas, ambos precisam valer).
+        "502":
+          description: fk-simulador-core-legado respondeu algo que a ACL nao sabe interpretar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: fk-simulador-core-legado indisponivel.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "504":
+          description: Timeout ao consultar fk-simulador-core-legado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Token emitido por fk-servidor-autorizacao (Token Exchange a partir da sessao do
+        fk-bff-gerente), com aud=servico-carteira-clientes e scope carteira.leitura.
+  schemas:
+    ClienteResumo:
+      type: object
+      required: [clienteId, nome, cpfMascarado]
+      properties:
+        clienteId:
+          type: string
+        nome:
+          type: string
+        cpfMascarado:
+          type: string
+          example: "***.456.789-**"
+    ClientesPageResponse:
+      type: object
+      required: [itens, pagina, tamanho, totalElementos, totalPaginas]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClienteResumo"
+        pagina:
+          type: integer
+        tamanho:
+          type: integer
+        totalElementos:
+          type: integer
+          format: int64
+        totalPaginas:
+          type: integer
+          format: int64
+    ProblemDetail:
+      type: object
+      description: RFC 7807 (org.springframework.http.ProblemDetail).
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri

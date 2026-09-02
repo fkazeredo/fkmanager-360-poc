@@ -21,8 +21,8 @@ própria de `CarteiraClientes` para os dados mestres do `Cliente`.
 
 A infraestrutura nasce aqui porque este comportamento a exige, e não como objetivo próprio:
 `app-gerente`, `bff-gerente`, `servidor-autorizacao`, `servico-carteira-clientes` com armazenamento e
-migrations próprias, Redis para a sessão, `simulador-core-legado` com a operação de dados mestres do
-`Cliente`, executor one-shot de migrations, Docker Compose, baseline de telemetria, ArchUnit,
+migrations próprias (Flyway embutido, ADR-0014), Redis para a sessão, `simulador-core-legado` com a
+operação de dados mestres do `Cliente`, Docker Compose, baseline de telemetria, ArchUnit,
 Testcontainers e o harness Playwright.
 
 Nada aqui pode ser simplificado: sem PKCE, sem sessão server-side, sem restrição de audience ou sem
