@@ -83,10 +83,10 @@ Contexto responsável por responder quem é o cliente, quais contas ele possui, 
 direito de atendê-lo: cadastro, vínculo e relacionamento — os dados de que a experiência do gerente
 precisa para chegar até a conta certa.
 
-**Não é dono do LimiteChequeEspecial nem de nenhum outro dado financeiro da conta.** O LimiteVigente
-é consultado por Credito, pela ACL própria daquele contexto (ADR-0004). Quando uma tela precisar
-exibir cliente, conta e limite ao mesmo tempo, quem compõe é o `bff-gerente`, e o resultado é modelo
-de apresentação — não agregado, não contexto (ADR-0013).
+**Não é dono do LimiteChequeEspecial nem de nenhum outro dado financeiro da conta.** O
+LimiteChequeEspecialVigente é consultado por Credito, pela ACL própria daquele contexto (ADR-0004).
+Quando uma tela precisar exibir cliente, conta e limite ao mesmo tempo, quem compõe é o
+`bff-gerente`, e o resultado é modelo de apresentação — não agregado, não contexto (ADR-0013).
 
 **CarteiraClientes**:
 Conjunto de Clientes sob responsabilidade de um GerenteRelacionamento. A associação pertence ao
@@ -108,17 +108,18 @@ Valor máximo que o Cliente pode utilizar além do saldo disponível na ContaCor
 crédito único do escopo.
 _Evitar_: Cheque especial, Crédito rotativo, Limite
 
-**LimiteVigente**:
+**LimiteChequeEspecialVigente**:
 O LimiteChequeEspecial atualmente reconhecido pelo CoreLegado. É o único valor que pode ser
 apresentado como "o limite do Cliente" (ADR-0002).
 _Evitar_: Limite aprovado, Limite atual
 
 **LimiteSolicitado**:
-Valor pretendido em uma SolicitacaoAumentoLimite. Não se torna LimiteVigente antes da
+Valor pretendido em uma SolicitacaoAumentoLimite. Não se torna LimiteChequeEspecialVigente antes da
 EfetivacaoLimite.
 
 **IncrementoSolicitado**:
-Diferença entre o LimiteSolicitado e o LimiteVigente. Um dos dois eixos da AlcadaAprovacao.
+Diferença entre o LimiteSolicitado e o LimiteChequeEspecialVigente. Um dos dois eixos da
+AlcadaAprovacao.
 
 **SolicitacaoAumentoLimite**:
 Pedido de aumento do LimiteChequeEspecial de uma ContaCorrente, registrado pelo
@@ -188,7 +189,7 @@ _Evitar_: Alçada do aprovador, Nível de aprovação
 
 **EfetivacaoLimite**:
 Aplicação de uma DecisaoCredito aprovada no CoreLegado. Só após a confirmação do Core o
-LimiteSolicitado se torna o LimiteVigente (ADR-0002, ADR-0009).
+LimiteSolicitado se torna o LimiteChequeEspecialVigente (ADR-0002, ADR-0009).
 _Evitar_: Aprovação, Conclusão, Aplicação
 
 **ProtocoloCore**:
@@ -257,7 +258,7 @@ Fato publicado por Credito quando uma DecisaoCredito passa a existir.
 
 **LimiteEfetivado**:
 Fato publicado por Credito quando o CoreLegado confirma uma EfetivacaoLimite e o LimiteSolicitado
-se torna o LimiteVigente.
+se torna o LimiteChequeEspecialVigente.
 
 **MovimentacaoImportada**:
 Fato publicado por Movimentacoes ao final de uma importação. Detalhamento pertence à spec do slice

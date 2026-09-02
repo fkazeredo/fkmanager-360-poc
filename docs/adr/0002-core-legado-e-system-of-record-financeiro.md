@@ -18,10 +18,10 @@ movimentações. Essa distinção deve aparecer no modelo, e não apenas na docu
 ## Consequências
 
 **Solicitação aprovada não significa limite efetivado.** Uma DecisaoCredito aprovada produz uma
-instrução de alteração para o CoreLegado; o LimiteVigente só muda quando o Core confirma. Nenhuma
-tela, relatório ou resposta de API pode afirmar que o Cliente possui um novo limite porque a
-decisão interna foi favorável — o valor exibido como limite vigente sempre vem do sistema
-autoritativo.
+instrução de alteração para o CoreLegado; o LimiteChequeEspecialVigente só muda quando o Core
+confirma. Nenhuma tela, relatório ou resposta de API pode afirmar que o Cliente possui um novo
+limite porque a decisão interna foi favorável — o valor exibido como limite vigente sempre vem do
+sistema autoritativo.
 
 Essa separação também é a origem legítima da integração online, do processamento batch, das
 staging tables e da reconciliação: a verdade mora em outro lugar e precisa ser trazida, e não

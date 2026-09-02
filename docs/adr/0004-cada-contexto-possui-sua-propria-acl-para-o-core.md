@@ -25,5 +25,5 @@ contrato do host.
 
 A montagem do `ContextoDecisaoCredito` é orquestrada por `Credito` a partir de fontes distintas:
 `CarteiraClientes` para identidade e relacionamento, a ACL própria de Credito para o limite
-vigente, e futuramente `Movimentacoes` para indicadores financeiros. O snapshot não precisa ter
-fonte física única.
+vigente, e futuramente `Movimentacoes` para indicadores financeiros. O `ContextoDecisaoCredito` não
+precisa ter fonte física única.
