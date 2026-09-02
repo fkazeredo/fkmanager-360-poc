@@ -1,13 +1,12 @@
 ---
 id: 0002
 title: Gerente seleciona a conta e vê o LimiteChequeEspecialVigente
-state: closed
+state: open
 triage: ready-for-agent
 spec: docs/specs/slice-1-straight-through-approval.md
 blocked_by: [0001]
 assignee:
 created: 2026-09-02
-closed: 2026-09-02
 ---
 
 # 0002 — Gerente seleciona a conta e vê o LimiteChequeEspecialVigente
@@ -133,3 +132,9 @@ evidência que este ticket não tem — registrado aqui para que a decisão seja
 **Não implementado (fora de escopo, fecha em #0003+):** `SolicitacaoAumentoLimite`,
 `ContextoDecisaoCredito`, `PoliticaCredito`, `MotorDecisaoCredito`, `credito_db`, Outbox,
 idempotência, efetivação, dispatcher, reconciliação, callback, e o control plane do simulador.
+
+**Status: aguardando code review final.** A implementação está completa e verificada, e os
+Acceptance Criteria acima estão marcados porque cada um tem evidência executável. O ticket permanece
+`open` deliberadamente: o fechamento definitivo só acontece depois do `/code-review` sobre
+`develop...feature/0002-selecao-de-conta-e-limite-vigente` e do tratamento dos achados, no mesmo
+padrão do #0001 — onde a revisão encontrou cinco IMPORTANT que a suíte verde não pegava.
