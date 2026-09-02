@@ -10,9 +10,11 @@
   } @else {
     <ul class="lista-clientes">
       @for (cliente of items(); track cliente.clienteId) {
-        <li>
-          <span class="nome">{{ cliente.nome }}</span>
-          <span class="cpf">{{ cliente.cpfMascarado }}</span>
+        <li [class.selecionado]="selecionado()?.clienteId === cliente.clienteId">
+          <button type="button" class="selecionar-cliente" (click)="selecionar(cliente)">
+            <span class="nome">{{ cliente.nome }}</span>
+            <span class="cpf">{{ cliente.cpfMascarado }}</span>
+          </button>
         </li>
       }
     </ul>

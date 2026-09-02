@@ -19,8 +19,9 @@
         Sistema externo simulado (nao e um bounded context deste repositorio). Expoe, sobre
         transporte HTTP simples, um contrato deliberadamente host-centric e ficticio da POC:
         campos abreviados, codigos numericos, datas yyyyMMdd, zero-padding e COD-RET/MSG-RET
-        proprios (ADR-0005). Neste ticket, uma unica capacidade: consulta em lote dos dados
-        mestres do Cliente.
+        proprios (ADR-0005). Capacidades: consulta em lote dos dados mestres do Cliente, consulta
+        das contas de um Cliente e consulta dos dados de credito de uma conta -- cada uma
+        consumida pela ACL do contexto a que aquele dado pertence (ADR-0004).
     </description>
 
     <dependencies>

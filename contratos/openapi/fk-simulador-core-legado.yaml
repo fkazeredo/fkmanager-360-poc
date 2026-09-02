@@ -3,18 +3,75 @@ info:
   title: fk-simulador-core-legado
   description: >-
     Contrato host-centric FICTICIO desta POC (ADR-0005) -- nao e replica de nenhum core bancario
-    real. Uma unica capacidade neste ticket: consulta em lote dos dados mestres do Cliente, para
-    que a listagem paginada da carteira nao dispare uma chamada por Cliente da pagina. Consumido
-    exclusivamente pela ACL de fk-servico-carteira-clientes; fk-bff-gerente nunca chama este
-    servico diretamente (AC30).
-  version: "0001"
+    real. Tres capacidades: consulta em lote dos dados mestres do Cliente e consulta das contas de
+    um Cliente, ambas consumidas pela ACL de fk-servico-carteira-clientes; e consulta dos dados de
+    credito de uma conta, consumida pela ACL de fk-servico-credito. Cada contexto integra o legado
+    pela sua propria ACL, apenas na fatia que lhe diz respeito (ADR-0004). fk-bff-gerente nunca
+    chama este servico diretamente (AC30).
+  version: "0002"
 servers:
   - url: http://localhost:8090
     description: Rede interna do Docker Compose (nome de servico), porta exposta localmente para dev.
 tags:
   - name: cliente-legado
     description: Consulta em lote de dados mestres, formato host-centric fictício.
+  - name: conta-legado
+    description: Consulta de contas de um Cliente e dos dados de credito de uma conta.
 paths:
+  /legado/contas/consulta:
+    post:
+      operationId: consultarContasDoClienteLegado
+      tags: [conta-legado]
+      summary: Contas correntes de um Cliente, pelo codigo host
+      description: >-
+        A chave e sempre codCli. Nao existe consulta de conta por numCta neste contrato, e a
+        ausencia e deliberada: nenhum consumidor precisa descobrir o dono de uma conta antes de
+        ja estar autorizado sobre o Cliente, e oferecer essa chave conveniente conviteria a
+        inversao de ordem que a autorizacao de recurso proibe (ADR-0007).
+
+        Devolve apenas identificacao -- nenhum dado financeiro, porque quem consome esta operacao
+        e CarteiraClientes, que nao e fachada financeira (ADR-0004).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContasLegadoQueryRequest"
+      responses:
+        "200":
+          description: >-
+            Requisicao processada. "Nenhuma ocorrencia" chega como codRet 121 dentro do 200, e nao
+            como 404 -- o status HTTP nao carrega o resultado de negocio (ADR-0005).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContasLegadoQueryResponse"
+        "400":
+          description: codCli ausente ou fora do formato de 10 digitos.
+  /legado/contas/consulta-credito:
+    post:
+      operationId: consultarCreditoDaContaLegado
+      tags: [conta-legado]
+      summary: Dados de credito da conta -- limite, situacao e classificacao de risco base
+      description: >-
+        Os tres fatos de credito vem da MESMA resposta, para que a procedencia dentro de Credito
+        seja registrada uma vez para o conjunto. Nenhum dado cadastral do Cliente aparece aqui:
+        isso pertence a CarteiraClientes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditoContaLegadoQueryRequest"
+      responses:
+        "200":
+          description: Requisicao processada; conta desconhecida chega como codRet 121.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditoContaLegadoQueryResponse"
+        "400":
+          description: numCta ausente ou fora do formato de 10 digitos.
   /legado/clientes/consulta-lote:
     post:
       operationId: consultarClientesLegadoEmLote
@@ -82,6 +139,85 @@ components:
         datCad:
           type: string
           description: Data no formato yyyyMMdd. Vazio quando codRet nao e sucesso.
+    ContasLegadoQueryRequest:
+      type: object
+      required: [codCli]
+      properties:
+        codCli:
+          type: string
+          pattern: "^\\d{10}$"
+          example: "0000000001"
+    ContaLegadoItem:
+      type: object
+      required: [numCta, codAge]
+      properties:
+        numCta:
+          type: string
+          description: Numero da conta no host, 10 digitos com zero-padding.
+          example: "0000010001"
+        codAge:
+          type: string
+          description: Codigo da agencia, 4 digitos. Em branco e campo opcional ausente.
+          example: "0001"
+    ContasLegadoQueryResponse:
+      type: object
+      required: [codRet, msgRet, codCli, contas]
+      properties:
+        codRet:
+          type: string
+          description: '"000" sucesso; "121" nenhuma conta encontrada.'
+          example: "000"
+        msgRet:
+          type: string
+        codCli:
+          type: string
+        contas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContaLegadoItem"
+    CreditoContaLegadoQueryRequest:
+      type: object
+      required: [numCta]
+      properties:
+        numCta:
+          type: string
+          pattern: "^\\d{10}$"
+          example: "0000010001"
+    CreditoContaLegadoQueryResponse:
+      type: object
+      required: [codRet, msgRet, numCta, vlrLimChqEsp, sitCta, codRscCrd, datAtuLim]
+      properties:
+        codRet:
+          type: string
+          description: '"000" sucesso; "121" conta nao encontrada.'
+          example: "000"
+        msgRet:
+          type: string
+        numCta:
+          type: string
+        vlrLimChqEsp:
+          type: string
+          description: >-
+            Limite de cheque especial em centavos, 15 digitos com zero-padding e sem separador.
+            Vazio quando codRet nao e sucesso.
+          example: "000000000500000"
+        sitCta:
+          type: string
+          description: '"01" regular, "02" bloqueada, "03" encerrada. Vazio quando codRet nao e sucesso.'
+          example: "01"
+        codRscCrd:
+          type: string
+          description: >-
+            Classificacao de risco de credito basica do host: "1" baixo, "2" medio, "3" alto. E
+            insumo interno da politica e nunca e apresentada ao GerenteRelacionamento.
+          example: "1"
+        datAtuLim:
+          type: string
+          description: >-
+            Data em que o PROPRIO HOST atualizou o limite, no formato yyyyMMdd. Nao se confunde
+            com o instante em que a plataforma consultou -- sao conceitos distintos, e a ACL de
+            Credito nao deriva um do outro.
+          example: "20260115"
     ClientesLegadoQueryResponse:
       type: object
       required: [codRet, msgRet, clientes]

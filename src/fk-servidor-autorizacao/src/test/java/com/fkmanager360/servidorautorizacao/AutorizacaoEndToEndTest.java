@@ -38,6 +38,8 @@ class AutorizacaoEndToEndTest {
     private static final String CLIENT_ID = "bff-gerente";
     private static final String CLIENT_SECRET = "troque-este-client-secret";
     private static final String REDIRECT_URI = "https://localhost/bff/login/oauth2/code/servidor-autorizacao";
+    private static final String CREDITO_CLIENT_ID = "servico-credito";
+    private static final String CREDITO_CLIENT_SECRET = "troque-este-client-secret";
 
     @Autowired
     private MockMvc mockMvc;
@@ -69,7 +71,7 @@ class AutorizacaoEndToEndTest {
                 .queryParam("response_type", "code")
                 .queryParam("client_id", CLIENT_ID)
                 .queryParam("redirect_uri", REDIRECT_URI)
-                .queryParam("scope", "openid carteira.leitura")
+                .queryParam("scope", "openid carteira.leitura credito.leitura")
                 .queryParam("state", state);
 
         if (codeChallenge != null) {
@@ -207,17 +209,144 @@ class AutorizacaoEndToEndTest {
 
     /**
      * ADR-0015: audience-restriction e controle do emissor, nao so do Resource Server. Sem o
-     * allow-list de {@code TokenExchangeAudienceAllowListAuthenticationProvider}, este pedido
-     * teria devolvido 200 com {@code aud=servico-credito} -- nenhum servico-credito precisa
-     * existir para provar a lacuna nem a correcao.
+     * allow-list de {@link com.fkmanager360.servidorautorizacao.config.RegisteredClientsConfig},
+     * este pedido teria devolvido 200 com a aud pedida -- o alvo aqui e um servico que existe no
+     * mapa de contextos e nao neste slice, exatamente o tipo de destino que um client comprometido
+     * tentaria alcancar.
      */
     @Test
     void tokenExchange_paraTargetNaoAutorizado_eRecusadoComInvalidTarget_semEmitirToken() throws Exception {
-        String codeVerifier = gerarCodeVerifier();
-        String codeChallenge = desafioS256(codeVerifier);
-        String code = obterCodigoDeAutorizacao(codeChallenge);
+        String accessToken = tokenDeLoginDoGerente();
 
-        MvcResult loginTokenResult = mockMvc.perform(post("/oauth2/token")
+        MvcResult exchangeResult = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", accessToken)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("audience", "servico-risco"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        String corpo = exchangeResult.getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_target");
+        assertThat(corpo).doesNotContain("access_token");
+    }
+
+    // --- A cadeia de delegacao do #0002 -----------------------------------------------------
+
+    @Test
+    void tokenExchange_doBffParaCredito_emiteTokenComAsDuasCapacidadesQueACadeiaExige() throws Exception {
+        String tokenParaCredito = trocarPor(basicAuthHeader(), tokenDeLoginDoGerente(),
+                "servico-credito", "credito.leitura carteira.leitura");
+
+        JWTClaimsSet claims = JWTParser.parse(tokenParaCredito).getJWTClaimsSet();
+
+        assertThat(claims.getAudience()).containsExactly("servico-credito");
+        assertThat((List<String>) claims.getClaim("scope"))
+                .containsExactlyInAnyOrder("credito.leitura", "carteira.leitura");
+        assertThat(claims.getSubject()).isEqualTo("gerente.a");
+    }
+
+    /**
+     * A segunda perna da cadeia (AC21): servico-credito continua a operacao em nome do usuario e
+     * troca o token que recebeu por um para servico-carteira-clientes -- <b>estreitando</b>
+     * capability, porque credito.leitura nao tem sentido algum no destino.
+     */
+    @Test
+    void tokenExchange_encadeado_deCreditoParaCarteira_reduzScopeEMantemOSujeito() throws Exception {
+        String tokenParaCredito = trocarPor(basicAuthHeader(), tokenDeLoginDoGerente(),
+                "servico-credito", "credito.leitura carteira.leitura");
+
+        String tokenParaCarteira = trocarPor(basicAuthHeaderDeCredito(), tokenParaCredito,
+                "servico-carteira-clientes", "carteira.leitura");
+
+        JWTClaimsSet claims = JWTParser.parse(tokenParaCarteira).getJWTClaimsSet();
+
+        assertThat(claims.getAudience()).containsExactly("servico-carteira-clientes");
+        assertThat((List<String>) claims.getClaim("scope")).containsExactly("carteira.leitura");
+        assertThat(claims.getSubject())
+                .as("delegacao preserva o sujeito: a operacao continua sendo do gerente")
+                .isEqualTo("gerente.a");
+        assertThat((List<String>) claims.getClaim("papeis")).containsExactly("GERENTE_RELACIONAMENTO");
+    }
+
+    @Test
+    void tokenExchange_deCreditoParaUmTargetForaDaSuaAllowList_eRecusado() throws Exception {
+        String tokenParaCredito = trocarPor(basicAuthHeader(), tokenDeLoginDoGerente(),
+                "servico-credito", "credito.leitura carteira.leitura");
+
+        MvcResult resultado = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeaderDeCredito())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", tokenParaCredito)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("audience", "servico-credito"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        assertThat((String) JsonPath.read(resultado.getResponse().getContentAsString(), "$.error"))
+                .isEqualTo("invalid_target");
+    }
+
+    // --- Nao-amplificacao de privilegio ------------------------------------------------------
+
+    /**
+     * O teste decisivo da politica de scope. O client aqui e o proprio bff-gerente, que tem
+     * {@code credito.leitura} registrado <b>e</b> servico-credito na allow-list de targets --
+     * entao target e registro do client passam. O que recusa e a unica regra que sobra: o
+     * <b>subject token</b> apresentado so tem {@code carteira.leitura}, e uma troca nao pode
+     * inventar capability que o token original nao carregava.
+     *
+     * <p>Sem esta regra, uma cadeia de delegacao seria uma escada de privilegio: cada perna
+     * poderia pedir mais do que a anterior tinha.
+     */
+    @Test
+    void tokenExchange_pedindoScopeQueOSubjectTokenNaoTem_eRecusadoComInvalidScope_semEmitirToken() throws Exception {
+        String tokenSomenteDeCarteira = trocarPor(basicAuthHeader(), tokenDeLoginDoGerente(),
+                "servico-carteira-clientes", "carteira.leitura");
+
+        MvcResult resultado = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", tokenSomenteDeCarteira)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("audience", "servico-credito")
+                        .param("scope", "credito.leitura"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        String corpo = resultado.getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_scope");
+        assertThat(corpo).doesNotContain("access_token");
+    }
+
+    @Test
+    void tokenExchange_deCreditoPedindoScopeQueEleNaoTemRegistrado_eRecusado() throws Exception {
+        String tokenParaCredito = trocarPor(basicAuthHeader(), tokenDeLoginDoGerente(),
+                "servico-credito", "credito.leitura carteira.leitura");
+
+        // servico-credito tem um unico scope registrado (carteira.leitura). Mesmo carregando
+        // credito.leitura no subject token, ele nao pode pedi-lo: as duas verificacoes se somam.
+        MvcResult resultado = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeaderDeCredito())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", tokenParaCredito)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("audience", "servico-carteira-clientes")
+                        .param("scope", "credito.leitura"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        assertThat(resultado.getResponse().getContentAsString()).doesNotContain("access_token");
+    }
+
+    // --- Helpers da cadeia -------------------------------------------------------------------
+
+    private String tokenDeLoginDoGerente() throws Exception {
+        String codeVerifier = gerarCodeVerifier();
+        String code = obterCodigoDeAutorizacao(desafioS256(codeVerifier));
+
+        MvcResult resultado = mockMvc.perform(post("/oauth2/token")
                         .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
                         .param("grant_type", "authorization_code")
                         .param("code", code)
@@ -226,19 +355,25 @@ class AutorizacaoEndToEndTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        String accessToken = JsonPath.read(loginTokenResult.getResponse().getContentAsString(), "$.access_token");
+        return JsonPath.read(resultado.getResponse().getContentAsString(), "$.access_token");
+    }
 
-        MvcResult exchangeResult = mockMvc.perform(post("/oauth2/token")
-                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+    private String trocarPor(String basicAuth, String subjectToken, String audience, String scope) throws Exception {
+        MvcResult resultado = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuth)
                         .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
-                        .param("subject_token", accessToken)
+                        .param("subject_token", subjectToken)
                         .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
-                        .param("audience", "servico-credito"))
-                .andExpect(status().isBadRequest())
+                        .param("audience", audience)
+                        .param("scope", scope))
+                .andExpect(status().isOk())
                 .andReturn();
 
-        String corpo = exchangeResult.getResponse().getContentAsString();
-        assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_target");
-        assertThat(corpo).doesNotContain("access_token");
+        return JsonPath.read(resultado.getResponse().getContentAsString(), "$.access_token");
+    }
+
+    private static String basicAuthHeaderDeCredito() {
+        String credenciais = CREDITO_CLIENT_ID + ":" + CREDITO_CLIENT_SECRET;
+        return "Basic " + Base64.getEncoder().encodeToString(credenciais.getBytes(StandardCharsets.UTF_8));
     }
 }

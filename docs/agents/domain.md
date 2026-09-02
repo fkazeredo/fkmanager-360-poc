@@ -10,10 +10,10 @@ point: it lists the bounded contexts (`IdentidadeEAcesso`, `CarteiraClientes`, `
 capabilities rather than contexts.
 
 The repo is **in transition**. `IdentidadeEAcesso` and `CarteiraClientes` were materialised by
-ticket #0001 and have their own `docs/contextos/<context>/CONTEXT.md`; `Credito`, `Risco` and
-`Movimentacoes` have not, so their vocabulary still lives in the root `CONTEXT.md`, grouped by
-context. `CONTEXT-MAP.md` records which is which and says when each remaining context's vocabulary
-moves out.
+ticket #0001 and `Credito` by ticket #0002; all three have their own
+`docs/contextos/<context>/CONTEXT.md`. `Risco` and `Movimentacoes` have not, so their vocabulary
+still lives in the root `CONTEXT.md`, grouped by context. `CONTEXT-MAP.md` records which is which
+and says when each remaining context's vocabulary moves out.
 
 `src/` holds **only deployables** — Maven modules and the Angular app, each with its own build
 file (`pom.xml`/`package.json`), each named with the `fk-` prefix, each a direct child of `src/`.
@@ -49,11 +49,14 @@ Current state of this repo:
 │   └── contextos/
 │       ├── identidade-e-acesso/
 │       │   └── CONTEXT.md             ← materialised by #0001
-│       └── carteira-clientes/
-│           └── CONTEXT.md             ← materialised by #0001
+│       ├── carteira-clientes/
+│       │   └── CONTEXT.md             ← materialised by #0001
+│       └── credito/
+│           └── CONTEXT.md             ← materialised by #0002
 └── src/                                ← deployables only, flat, fk-prefixed
     ├── fk-servidor-autorizacao/
     ├── fk-servico-carteira-clientes/
+    ├── fk-servico-credito/
     ├── fk-bff-gerente/
     ├── fk-app-gerente/
     └── fk-simulador-core-legado/

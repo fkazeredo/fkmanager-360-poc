@@ -37,7 +37,7 @@ public class SecurityConfig {
                         // Scope grosso e papel organizacional sao perguntas distintas (ADR-0015):
                         // scope diz se a identidade pode tentar a capacidade, papel e o que este
                         // endpoint exige. Ambos precisam valer.
-                        .requestMatchers("/carteira/**").access(new WebExpressionAuthorizationManager(
+                        .requestMatchers("/carteira/**", "/clientes/**").access(new WebExpressionAuthorizationManager(
                                 "hasAuthority('SCOPE_carteira.leitura') and hasRole('GERENTE_RELACIONAMENTO')"))
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));

@@ -22,13 +22,24 @@ spring:
             client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
-            scope: openid,carteira.leitura
+            # O login carrega as capacidades que a jornada inteira usa; cada troca adiante
+            # estreita a partir daqui, e nunca amplia (ADR-0015).
+            scope: openid,carteira.leitura,credito.leitura
           carteira-clientes-exchange:
             provider: servidor-autorizacao
             client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
             client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
             authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
             scope: carteira.leitura
+          credito-exchange:
+            provider: servidor-autorizacao
+            client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
+            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
+            authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
+            # carteira.leitura entra aqui porque servico-credito precisa continuar a operacao
+            # contra servico-carteira-clientes -- e a capacidade que a proxima perna da cadeia
+            # vai estreitar para, nunca uma que ela ganharia do nada.
+            scope: credito.leitura,carteira.leitura
         provider:
           servidor-autorizacao:
             # Endpoints explicitos, nao issuer-uri: issuer-uri dispara descoberta OIDC (uma
@@ -55,6 +66,9 @@ bff-gerente:
     base-url: ${CARTEIRA_CLIENTES_BASE_URL:http://localhost:8081}
     # nome logico, nao URI absoluta (RFC 8693: "resource" exige URI, "audience" nao).
     audience: servico-carteira-clientes
+  credito:
+    base-url: ${CREDITO_BASE_URL:http://localhost:8083}
+    audience: servico-credito
 
 server:
   port: 8082

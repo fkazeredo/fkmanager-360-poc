@@ -18,13 +18,16 @@
     </description>
 
     <!--
-        #0001 materializa apenas os deployables que o comportamento vertical exige (ADR-0010):
-        servidor-autorizacao, servico-carteira-clientes e sua migracao, bff-gerente e
-        simulador-core-legado. servico-credito e os demais nascem em tickets futuros.
+        Cada deployable e materializado quando um comportamento o exige (ADR-0010): #0001 trouxe
+        servidor-autorizacao, servico-carteira-clientes, bff-gerente e simulador-core-legado;
+        #0002 trouxe servico-credito, que nasce sem persistencia. servico-risco,
+        servico-movimentacoes, batch-movimentacoes, servico-auditoria e servico-notificacoes
+        nascem em slices futuros.
     -->
     <modules>
         <module>src/fk-servidor-autorizacao</module>
         <module>src/fk-servico-carteira-clientes</module>
+        <module>src/fk-servico-credito</module>
         <module>src/fk-bff-gerente</module>
         <module>src/fk-simulador-core-legado</module>
     </modules>

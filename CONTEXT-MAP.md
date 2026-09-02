@@ -49,6 +49,10 @@ invariantes que justificam o projeto — maker-checker (ADR-0007), alçada em do
 fotografia imutável do ContextoDecisaoCredito (ADR-0006) e conclusão idempotente da efetivação
 (ADR-0009).
 
+Materializado pelo ticket #0002 como `fk-servico-credito` (ADR-0013), com a fatia de leitura do
+`LimiteChequeEspecialVigente` e **sem persistência própria** — não há estado durável de Credito
+ainda (ADR-0010, ADR-0014).
+
 ### Risco — **Supporting Domain**
 
 Contexto especializado que **pontua** e não aprova crédito: produz `ResultadoAvaliacaoRisco` para
@@ -100,7 +104,8 @@ Promovê-las a contexto inflaria o mapa e ensinaria exatamente a coisa errada.
 
 ## Materialização em código
 
-`IdentidadeEAcesso` e `CarteiraClientes` foram materializados pelo ticket #0001; os demais
+`IdentidadeEAcesso` e `CarteiraClientes` foram materializados pelo ticket #0001, e `Credito` pelo
+ticket #0002; os demais
 continuam apenas documentados. Modelo e infraestrutura só aparecem quando uma spec os exige
 (ADR-0010), e este mapa **não cria diretórios, serviços ou scaffolding** para acomodar documentação
 futura.
@@ -109,7 +114,7 @@ futura.
 | --- | --- | --- |
 | `IdentidadeEAcesso` | sim (`docs/contextos/identidade-e-acesso/`) | Ticket #0001 (slice 1). Vocabulário de negócio é o dos Atores, que continua no `CONTEXT.md` raiz por ser compartilhado; autoridade financeira pertence a `Credito`. |
 | `CarteiraClientes` | sim (`docs/contextos/carteira-clientes/`) | Ticket #0001 (slice 1). |
-| `Credito` | não | Exercitado pelo slice 1; é o contexto com vocabulário mais desenvolvido. |
+| `Credito` | sim (`docs/contextos/credito/`) | Ticket #0002 (slice 1), deployable `fk-servico-credito`. Nasceu **sem persistência**: só a leitura do `LimiteChequeEspecialVigente` existe em código; `credito_db` nasce com a `SolicitacaoAumentoLimite` (ADR-0010, ADR-0014). |
 | `Risco` | não | Entra quando uma spec introduzir decisão que o `MotorDecisaoCredito` não conclui. |
 | `Movimentacoes` | não | Previsto para o slice 4; vocabulário provisório. |
 

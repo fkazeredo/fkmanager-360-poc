@@ -66,6 +66,7 @@ if ((Test-Path $envDestino) -and -not $Forcar) {
         'CARTEIRA_DB_APP_PASSWORD=troque-esta-senha-app'                    = "CARTEIRA_DB_APP_PASSWORD=$(New-SenhaAleatoria)"
         'REDIS_PASSWORD=troque-esta-senha-redis'                            = "REDIS_PASSWORD=$(New-SenhaAleatoria)"
         'AUTH_SERVER_BFF_CLIENT_SECRET=troque-este-client-secret'           = "AUTH_SERVER_BFF_CLIENT_SECRET=$(New-SenhaAleatoria)"
+        'AUTH_SERVER_CREDITO_CLIENT_SECRET=troque-este-client-secret-credito' = "AUTH_SERVER_CREDITO_CLIENT_SECRET=$(New-SenhaAleatoria)"
         'gerente.a:troque-senha-a:GERENTE_RELACIONAMENTO;gerente.b:troque-senha-b:GERENTE_RELACIONAMENTO' = "gerente.a:$(New-SenhaAleatoria -Tamanho 12):GERENTE_RELACIONAMENTO;gerente.b:$(New-SenhaAleatoria -Tamanho 12):GERENTE_RELACIONAMENTO"
     }
     foreach ($chave in $substituicoes.Keys) {

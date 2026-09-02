@@ -7,6 +7,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2TokenExchangeAuthenticationProvider;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -21,27 +22,28 @@ import java.util.Set;
  * decompilacao de {@code OAuth2AuthorizationServerWebSecurityConfiguration} -- essa
  * autoconfiguracao inteira e {@code @ConditionalOnDefaultWebSecurity}: definir qualquer
  * {@link SecurityFilterChain} na aplicacao desliga as duas, nao so uma). Existe so para acrescentar
- * {@link TokenExchangeAudienceAllowListAuthenticationProvider} ao endpoint de token, antes do
+ * {@link TokenExchangePolicyAuthenticationProvider} ao endpoint de token, no lugar do
  * {@code OAuth2TokenExchangeAuthenticationProvider} padrao -- esse e o unico ponto de extensao
- * nativo do Spring Authorization Server 7.1 para validar o target de um Token Exchange antes da
- * emissao (ADR-0015). Nenhum outro comportamento muda.
+ * nativo do Spring Authorization Server 7.1 para validar target e scope de um Token Exchange
+ * antes da emissao (ADR-0015). Nenhum outro comportamento muda.
  */
 @Configuration
 public class AuthorizationServerSecurityConfig {
 
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
-    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http, JwtDecoder ownJwtDecoder)
+            throws Exception {
         http.oauth2AuthorizationServer(authorizationServer -> {
             http.securityMatcher(authorizationServer.getEndpointsMatcher());
             authorizationServer.oidc(Customizer.withDefaults());
             // Decora o provider padrao de Token Exchange no proprio lugar dele na lista, em vez
-            // de acrescentar mais um: ver o javadoc de TokenExchangeAudienceAllowListAuthentication
-            // Provider para por que um provider extra que so lanca excecao nao basta aqui.
+            // de acrescentar mais um: ver o javadoc de TokenExchangePolicyAuthenticationProvider
+            // para por que um provider extra que so lanca excecao nao basta aqui.
             authorizationServer.tokenEndpoint(tokenEndpoint -> tokenEndpoint.authenticationProviders(providers -> {
                 for (int i = 0; i < providers.size(); i++) {
                     if (providers.get(i) instanceof OAuth2TokenExchangeAuthenticationProvider tokenExchangeProvider) {
-                        providers.set(i, new TokenExchangeAudienceAllowListAuthenticationProvider(tokenExchangeProvider));
+                        providers.set(i, new TokenExchangePolicyAuthenticationProvider(tokenExchangeProvider, ownJwtDecoder));
                     }
                 }
             }));

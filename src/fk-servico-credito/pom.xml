@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.fkmanager360</groupId>
+        <artifactId>fkmanager-360-poc</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>fk-servico-credito</artifactId>
+    <packaging>jar</packaging>
+
+    <name>fk-servico-credito</name>
+    <description>
+        Contexto Credito, dono semantico do LimiteChequeEspecial. Neste ticket, expoe a consulta
+        do LimiteChequeEspecialVigente que o CoreLegado reconhece agora, lido pela ACL propria
+        deste contexto (ADR-0004), sempre depois de CarteiraClientes confirmar o direito de
+        atendimento (ADR-0007). Nasce SEM persistencia: nao ha estado duravel de Credito ainda, e
+        credito_db so existira quando a SolicitacaoAumentoLimite existir (ADR-0010, ADR-0014).
+    </description>
+
+    <properties>
+        <wiremock.version>3.13.2</wiremock.version>
+    </properties>
+
+    <!--
+        Mesmo alinhamento de jetty que fk-servico-carteira-clientes precisa: wiremock-jetty12 pede
+        jetty-ee10-bom 12.0.30 internamente, mas spring-boot-dependencies ja importa
+        jetty-bom/jetty-ee11-bom 12.1.12, e as duas versoes sao binariamente incompativeis.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.eclipse.jetty.ee10</groupId>
+                <artifactId>jetty-ee10-bom</artifactId>
+                <version>12.1.12</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <!-- Tambem OAuth client: o Token Exchange encadeado para servico-carteira-clientes
+             (ADR-0015) usa a infraestrutura padrao do Spring Security, sem cache proprio. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Sem starter-jdbc, sem driver, sem Flyway: este servico nao tem persistencia neste
+             ticket, e a ausencia da dependencia e o que impede que ela apareca por descuido. -->
+
+        <!-- Testes: Spring Boot 4 fatiou spring-boot-starter-test em starters por slice. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- S5: smoke contra o simulador-core-legado real, sem duplicar a matriz patologica de S4. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- S4/S6: mesmo HTTP client e adapter de producao contra um mock HTTP server real. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-jetty12</artifactId>
+            <version>${wiremock.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- S8: regra de dependencia desde o primeiro codigo. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>fk-servico-credito</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
