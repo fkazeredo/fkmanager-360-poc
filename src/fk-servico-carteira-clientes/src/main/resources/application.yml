@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: fk-servico-carteira-clientes
+  datasource:
+    url: ${CARTEIRA_DB_JDBC_URL}
+    username: ${CARTEIRA_DB_APP_USER}
+    password: ${CARTEIRA_DB_APP_PASSWORD}
+  # Migracao embutida (ADR-0014, emenda 2026-09-02): DataSource proprio e independente do
+  # spring.datasource.* acima -- a query da aplicacao (JdbcClient) nunca ve a credencial de DDL,
+  # mesmo rodando no mesmo processo.
+  flyway:
+    url: ${CARTEIRA_DB_JDBC_URL}
+    user: ${CARTEIRA_DB_MIGRATOR_USER}
+    password: ${CARTEIRA_DB_MIGRATOR_PASSWORD}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_SERVER_ISSUER_URI:}
+
+carteira-clientes:
+  core-legado:
+    base-url: ${CORE_LEGADO_BASE_URL}
+    connect-timeout: PT2S
+    read-timeout: PT3S
+  # aud esperado neste servico (validado pelo AudienceValidator, alem do issuer padrao do Spring).
+  security:
+    expected-audience: servico-carteira-clientes
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    readinessstate:
+      enabled: true

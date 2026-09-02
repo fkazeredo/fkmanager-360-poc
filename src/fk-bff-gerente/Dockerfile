@@ -1,0 +1,20 @@
+# Contexto de build = raiz do repositorio (o reactor precisa do pom.xml agregador).
+FROM eclipse-temurin:25-jdk-alpine AS build
+WORKDIR /workspace
+
+COPY pom.xml mvnw ./
+COPY .mvn/ .mvn/
+COPY src/fk-bff-gerente/pom.xml src/fk-bff-gerente/pom.xml
+RUN chmod +x mvnw
+
+COPY src/fk-bff-gerente/src src/fk-bff-gerente/src
+RUN ./mvnw -f src/fk-bff-gerente/pom.xml -o -B package -DskipTests \
+    || ./mvnw -f src/fk-bff-gerente/pom.xml -B package -DskipTests
+
+FROM eclipse-temurin:25-jre-alpine
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+COPY --from=build /workspace/src/fk-bff-gerente/target/fk-bff-gerente.jar app.jar
+USER app
+EXPOSE 8082
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

@@ -18,7 +18,7 @@ que em `Movimentacoes`, e isso é deliberado.
 O mapa dos contextos — responsabilidades, relações, papel estratégico e estado de materialização de
 cada um — está em `CONTEXT-MAP.md`, na raiz. Para um contexto ainda não materializado, este arquivo
 é o glossário; para um já materializado, seu vocabulário específico vive em
-`src/<contexto>/CONTEXT.md`, conforme `docs/agents/domain.md`. **Atores**, abaixo, é vocabulário
+`docs/contextos/<contexto>/CONTEXT.md`, conforme `docs/agents/domain.md`. **Atores**, abaixo, é vocabulário
 compartilhado e por isso permanece aqui mesmo depois de um contexto materializar.
 
 ## Atores
@@ -72,12 +72,12 @@ _Evitar_: Mainframe, Legado, Backend
 
 ## IdentidadeEAcesso
 
-Materializado (ticket #0001). Vocabulário próprio em `src/identidade-e-acesso/CONTEXT.md`. Seu
+Materializado (ticket #0001). Vocabulário próprio em `docs/contextos/identidade-e-acesso/CONTEXT.md`. Seu
 vocabulário de negócio é o da seção **Atores** acima: os papéis reconhecidos pelo sistema.
 
 ## CarteiraClientes
 
-Materializado (ticket #0001). Vocabulário próprio em `src/carteira-clientes/CONTEXT.md`.
+Materializado (ticket #0001). Vocabulário próprio em `docs/contextos/carteira-clientes/CONTEXT.md`.
 
 ## Credito
 

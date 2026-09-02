@@ -23,11 +23,10 @@
         simulador-core-legado. servico-credito e os demais nascem em tickets futuros.
     -->
     <modules>
-        <module>src/identidade-e-acesso/servidor-autorizacao</module>
-        <module>src/carteira-clientes/migrations</module>
-        <module>src/carteira-clientes/servico-carteira-clientes</module>
-        <module>src/bff-gerente</module>
-        <module>src/simulador-core-legado</module>
+        <module>src/fk-servidor-autorizacao</module>
+        <module>src/fk-servico-carteira-clientes</module>
+        <module>src/fk-bff-gerente</module>
+        <module>src/fk-simulador-core-legado</module>
     </modules>
 
     <properties>

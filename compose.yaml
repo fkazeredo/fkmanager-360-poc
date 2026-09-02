@@ -43,7 +43,7 @@ services:
   simulador-core-legado:
     build:
       context: .
-      dockerfile: src/simulador-core-legado/Dockerfile
+      dockerfile: src/fk-simulador-core-legado/Dockerfile
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/actuator/health"]
       interval: 5s
@@ -53,7 +53,7 @@ services:
   servidor-autorizacao:
     build:
       context: .
-      dockerfile: src/identidade-e-acesso/servidor-autorizacao/Dockerfile
+      dockerfile: src/fk-servidor-autorizacao/Dockerfile
     environment:
       # DNS interno: o claim "iss" dos tokens nao precisa ser o endereco que o navegador ve
       # (AUTH_SERVER_PUBLIC_URL, usado por bff-gerente) -- so precisa ser estavel e alcancavel
@@ -72,34 +72,23 @@ services:
       timeout: 5s
       retries: 10
 
-  migrations-carteira-clientes:
-    build:
-      context: .
-      dockerfile: src/carteira-clientes/migrations/Dockerfile
-    environment:
-      CARTEIRA_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${CARTEIRA_DB_NAME}
-      CARTEIRA_DB_MIGRATOR_USER: ${CARTEIRA_DB_MIGRATOR_USER}
-      CARTEIRA_DB_MIGRATOR_PASSWORD: ${CARTEIRA_DB_MIGRATOR_PASSWORD}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-
   servico-carteira-clientes:
     build:
       context: .
-      dockerfile: src/carteira-clientes/servico-carteira-clientes/Dockerfile
+      dockerfile: src/fk-servico-carteira-clientes/Dockerfile
     environment:
       CARTEIRA_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${CARTEIRA_DB_NAME}
       CARTEIRA_DB_APP_USER: ${CARTEIRA_DB_APP_USER}
       CARTEIRA_DB_APP_PASSWORD: ${CARTEIRA_DB_APP_PASSWORD}
+      # Migracao embutida (ADR-0014, emenda 2026-09-02): credencial de DDL separada da credencial
+      # de DML acima -- Flyway roda no boot com esta, o JdbcClient da API nunca a ve.
+      CARTEIRA_DB_MIGRATOR_USER: ${CARTEIRA_DB_MIGRATOR_USER}
+      CARTEIRA_DB_MIGRATOR_PASSWORD: ${CARTEIRA_DB_MIGRATOR_PASSWORD}
       CORE_LEGADO_BASE_URL: http://simulador-core-legado:8090
       AUTH_SERVER_ISSUER_URI: http://servidor-autorizacao:9000
     depends_on:
       postgres:
         condition: service_healthy
-      migrations-carteira-clientes:
-        condition: service_completed_successfully
       simulador-core-legado:
         condition: service_healthy
       servidor-autorizacao:
@@ -113,7 +102,7 @@ services:
   bff-gerente:
     build:
       context: .
-      dockerfile: src/bff-gerente/Dockerfile
+      dockerfile: src/fk-bff-gerente/Dockerfile
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -139,7 +128,7 @@ services:
   app-gerente:
     build:
       context: .
-      dockerfile: src/app-gerente/Dockerfile
+      dockerfile: src/fk-app-gerente/Dockerfile
     ports:
       - "80:80"
       - "443:443"

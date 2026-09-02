@@ -77,9 +77,10 @@ sem cache de token proprietário), `bff-gerente` (sessão em Redis via Spring Se
 `OAuth2AuthorizedClientManager`, 8 testes), `app-gerente` (Angular 22 standalone/zoneless), Docker
 Compose com os 8 serviços, e o harness Playwright (S7, 4 testes contra a stack real).
 
-68 testes automatizados verdes (40 `servico-carteira-clientes`, 8 `servidor-autorizacao`+migrations,
-8 `bff-gerente`, 6 `simulador-core-legado`, 5 Angular, 4 Playwright), `./mvnw verify` completo e
-`npm test` do Angular passando.
+67 testes automatizados verdes (40 `fk-servico-carteira-clientes` — inclui a migração embutida
+provada via Testcontainers —, 4 `fk-servidor-autorizacao`, 8 `fk-bff-gerente`,
+6 `fk-simulador-core-legado`, 5 Angular, 4 Playwright), `./mvnw clean verify` completo sobre o
+reactor inteiro e `npm test` do Angular passando.
 
 A verificação manual e o harness Playwright contra a topologia real (não mocks, não MockMvc)
 encontraram e corrigiram bugs que a suíte automatizada anterior não pegava:
@@ -109,8 +110,16 @@ Todos corrigidos com teste de regressão (unitário onde fazia sentido, Playwrig
 real expõe o sintoma).
 
 `IdentidadeEAcesso` e `CarteiraClientes` materializados: vocabulário movido de `CONTEXT.md` raiz
-para `src/identidade-e-acesso/CONTEXT.md` e `src/carteira-clientes/CONTEXT.md`; `CONTEXT-MAP.md`
-atualizado.
+para `docs/contextos/identidade-e-acesso/CONTEXT.md` e `docs/contextos/carteira-clientes/CONTEXT.md`
+(reorganizado nesta mesma etapa para tirar documentação de dentro de `src/`, que passou a conter
+só deployables); `CONTEXT-MAP.md` atualizado.
+
+Nomenclatura revisada apos o fechamento inicial: pacotes/classes tecnicas alinhadas ao padrao
+PT-BR (dominio) / ingles (engenharia) descrito em `docs/agents/domain.md`; todo deployable em
+`src/` recebeu o prefixo `fk-`; a estrutura interna de cada servico Java passou a seguir o mesmo
+esqueleto de pacotes (`adapter`/`application`/`config`/`domain`); o executor dedicado de
+migrations foi consolidado dentro de `fk-servico-carteira-clientes` (Flyway embutido com
+credencial de DDL separada, ADR-0014 emendado).
 
 Não implementado (explicitamente fora de escopo, fecha em #0002+): `servico-credito`, leitura de
 limite, Token Exchange encadeado `Credito` → `CarteiraClientes`, seleção de `Cliente` e suas

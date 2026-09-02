@@ -107,8 +107,8 @@ futura.
 
 | Contexto | Materializado | Observação |
 | --- | --- | --- |
-| `IdentidadeEAcesso` | sim (`src/identidade-e-acesso/`) | Ticket #0001 (slice 1). Vocabulário de negócio é o dos Atores, que continua no `CONTEXT.md` raiz por ser compartilhado; autoridade financeira pertence a `Credito`. |
-| `CarteiraClientes` | sim (`src/carteira-clientes/`) | Ticket #0001 (slice 1). |
+| `IdentidadeEAcesso` | sim (`docs/contextos/identidade-e-acesso/`) | Ticket #0001 (slice 1). Vocabulário de negócio é o dos Atores, que continua no `CONTEXT.md` raiz por ser compartilhado; autoridade financeira pertence a `Credito`. |
+| `CarteiraClientes` | sim (`docs/contextos/carteira-clientes/`) | Ticket #0001 (slice 1). |
 | `Credito` | não | Exercitado pelo slice 1; é o contexto com vocabulário mais desenvolvido. |
 | `Risco` | não | Entra quando uma spec introduzir decisão que o `MotorDecisaoCredito` não conclui. |
 | `Movimentacoes` | não | Previsto para o slice 4; vocabulário provisório. |
@@ -119,9 +119,10 @@ Enquanto um contexto não for materializado, seu vocabulário permanece na seç�
 `CONTEXT.md` raiz, que serve como **glossário consolidado**.
 
 Quando um contexto for materializado em código, seu vocabulário específico é **movido** para o
-`CONTEXT.md` do próprio contexto (`src/<contexto>/CONTEXT.md`) e este mapa passa a apontar para
-lá. A migração acontece contexto a contexto, na spec que o materializa — não antecipadamente, e
-não criando arquivos vazios ou especulativos.
+`CONTEXT.md` do próprio contexto (`docs/contextos/<contexto>/CONTEXT.md`) e este mapa passa a
+apontar para lá. A migração acontece contexto a contexto, na spec que o materializa — não
+antecipadamente, e não criando arquivos vazios ou especulativos. `src/` contém só deployables —
+nenhuma pasta de documentação mora lá.
 
 Decisões sistêmicas permanecem em `docs/adr/`. Decisões específicas de um contexto materializado
-podem viver em `src/<contexto>/docs/adr/`, conforme `docs/agents/domain.md`.
+podem viver em `docs/contextos/<contexto>/adr/`, conforme `docs/agents/domain.md`.

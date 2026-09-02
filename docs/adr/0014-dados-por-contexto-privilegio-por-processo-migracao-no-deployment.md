@@ -43,3 +43,28 @@ parte do contrato de release.
 Ferramenta de consulta não lê banco de negócio por atalho: Grafana consulta os backends de
 observabilidade, nunca `credito_db` ou `movimentacoes_db` (ADR-0017). Reporting autoritativo, quando
 existir, será uma projeção criada explicitamente para essa finalidade.
+
+## Emenda 2026-09-02: migração embutida para contextos de baixa escala
+
+Para #0001, o executor de migrations dedicado (processo/deployable separado) provou-se peso
+desproporcional para dois scripts SQL rodando numa única réplica: um módulo Maven inteiro, imagem
+Docker própria e um passo extra de orquestração no Compose, só para preservar uma garantia — nenhum
+processo com DDL em runtime — cujo risco real, nesta escala, é teórico: não há réplicas concorrentes,
+e o blast radius de um processo comprometido numa POC educacional não pesa o mesmo que em produção.
+
+A partir desta emenda, um contexto que não precise de coordenação de deployment multi-réplica pode
+migrar via Flyway embutido no próprio processo, usando `spring.flyway.*` com credencial de DDL
+(migrator) **distinta** de `spring.datasource.*` (credencial de DML da aplicação) — Spring Boot
+resolve essas duas propriedades como `DataSource`s independentes. Isso preserva a separação de
+privilégio por credencial (a query da aplicação nunca usa a credencial de DDL), mas abre mão da
+garantia mais forte de "nenhum processo com DDL configurado, nem dormente": a credencial de migrator
+passa a existir na configuração do processo que também serve tráfego, mesmo que usada só no boot.
+
+Continua valendo, sem mudança: dados pertencem ao contexto; privilégio é separado por credencial
+(mesmo que agora dentro do mesmo processo); e nenhuma aplicação decide seu próprio schema
+implicitamente — toda mudança é script Flyway versionado, nunca DDL ad-hoc.
+
+Um contexto que justifique a garantia mais forte — múltiplas réplicas do processo online, ou postura
+de segurança que não tolere credencial de DDL em processo que serve tráfego — volta ao executor
+dedicado. Isso é decisão por contexto, avaliada quando o contexto nasce, não regra única obrigatória
+para o repositório inteiro.
