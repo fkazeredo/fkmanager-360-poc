@@ -1,0 +1,48 @@
+# Segredos e configuracao local -- nunca versionados (ADR-0013, emenda)
+.env
+.env.local
+.env.*.local
+*.p12
+*.jks
+*.pem
+*.key
+*.crt
+!src/**/src/**/*.pem.example
+
+# Java / Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+e2e/.cache/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Volumes de dados do Compose montados localmente (quando houver bind mount)
+.data/
