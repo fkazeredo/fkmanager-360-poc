@@ -1,12 +1,13 @@
 ---
 id: 0002
 title: Gerente seleciona a conta e vê o LimiteChequeEspecialVigente
-state: open
+state: closed
 triage: ready-for-agent
 spec: docs/specs/slice-1-straight-through-approval.md
 blocked_by: [0001]
 assignee:
 created: 2026-09-02
+closed: 2026-09-02
 ---
 
 # 0002 — Gerente seleciona a conta e vê o LimiteChequeEspecialVigente
@@ -222,3 +223,7 @@ Playwright contra a stack real recém-construída, incluindo a jornada estendida
 
 **Reavaliação do ACCEPTED TRADEOFF original (overfetch).** RESOLVED, não permanece como tradeoff — ver
 a mudança estrutural acima.
+
+**Re-review**: 0 BLOCKER, 0 IMPORTANT, todos os 17 achados (1 BLOCKER + 10 IMPORTANT + 5 COSMETIC + 1
+ACCEPTED TRADEOFF reavaliado) RESOLVED, gates verdes, ACs dentro da fronteira do ticket satisfeitos.
+**Ticket fechado.**
