@@ -37,7 +37,7 @@ public class CarteiraProxyController {
         this.authorizedClientManager = authorizedClientManager;
     }
 
-    @GetMapping("/api/carteira/clientes")
+    @GetMapping(path = "/api/carteira/clientes", produces = "application/json")
     String listarClientesDaCarteira(
             Authentication authentication,
             HttpServletRequest request,
