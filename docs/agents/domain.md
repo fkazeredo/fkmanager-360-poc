@@ -60,8 +60,8 @@ Target state, reached one context at a time as specs materialise them:
 
 ## Use the glossary's vocabulary
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a
-test name), use the term as defined in the glossary. Don't drift to synonyms the glossary
+When your output names a domain concept (in a spec or ticket title, a refactor proposal, a hypothesis,
+a test name), use the term as defined in the glossary. Don't drift to synonyms the glossary
 explicitly avoids — the `_Evitar_` lines are normative.
 
 A concept belongs to a context. The same word can mean different things in two contexts (see

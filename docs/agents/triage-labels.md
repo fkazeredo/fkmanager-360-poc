@@ -1,15 +1,21 @@
 # Triage Labels
 
-The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker.
+The skills speak in terms of five canonical triage roles. In this repo the tracker is markdown files
+(`docs/agents/issue-tracker.md`), so a "label" is the value of the `triage:` field in a spec's or
+ticket's front matter — not a GitHub label.
 
-| Label in mattpocock/skills | Label in our tracker | Meaning                                  |
-| -------------------------- | -------------------- | ---------------------------------------- |
-| `needs-triage`             | `needs-triage`       | Maintainer needs to evaluate this issue  |
-| `needs-info`               | `needs-info`         | Waiting on reporter for more information |
-| `ready-for-agent`          | `ready-for-agent`    | Fully specified, ready for an AFK agent  |
-| `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
-| `wontfix`                  | `wontfix`            | Will not be actioned                     |
+| Label in mattpocock/skills | Value in our `triage:` field | Meaning                                  |
+| -------------------------- | ---------------------------- | ---------------------------------------- |
+| `needs-triage`             | `needs-triage`               | Maintainer needs to evaluate this        |
+| `needs-info`               | `needs-info`                 | Waiting on reporter for more information |
+| `ready-for-agent`          | `ready-for-agent`            | Fully specified, ready for an AFK agent  |
+| `ready-for-human`          | `ready-for-human`            | Requires human implementation            |
+| `wontfix`                  | `wontfix`                    | Will not be actioned                     |
 
-When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
+Exactly one value at a time; `triage:` is a single field, not a list. Applying a label is editing that
+field, and the change travels in the same PR as whatever else moved.
+
+`state:` is orthogonal and holds `open` or `closed`. A `wontfix` ticket is normally also `closed`; the
+two fields answer different questions, so neither implies the other.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
