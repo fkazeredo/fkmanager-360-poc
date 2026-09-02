@@ -1,45 +1,150 @@
-# Issue tracker: GitHub
+# Issue tracker: markdown files in this repo
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Specs and tickets live as **markdown files under `docs/`**, versioned alongside the code and reviewed
+as diffs. This repo does **not** use the GitHub issue tracker. Do not create GitHub issues, and do not
+reach for `gh issue` — if you find yourself wanting an issue, write a file instead.
+
+## Layout
+
+```
+docs/
+├── specs/                       one file per specification
+│   └── slice-1-straight-through-approval.md
+└── tickets/                     one file per ticket
+    └── 0001-<slug>.md
+```
+
+Normativo, e vale sobre qualquer default de skill:
+
+- specs vivem em `docs/specs/<slug>.md`;
+- tickets vivem em `docs/tickets/NNNN-<slug>.md`;
+- ambos são versionados em git e revisados como diff;
+- **não** usar `.scratch/<feature-slug>/issues/` como destino final — é local descartável, e este
+  layout o substitui;
+- **não** usar `gh issue create`, nem qualquer outra escrita no tracker do GitHub;
+- `/to-tickets` escreve os arquivos diretamente em `docs/tickets/`, em ordem de dependência
+  (bloqueadores primeiro), usando o template abaixo.
+
+## Identifiers
+
+A ticket is `docs/tickets/NNNN-<slug>.md`, where `NNNN` is zero-padded and allocated as the highest
+existing id plus one. Reference a ticket as `#NNNN`. A spec is referenced by its path, or by its slug
+when the context is unambiguous.
+
+Ids are never reused, and a file is never deleted to "free" one. Closing is a state change, not a
+removal — the history lives in git.
+
+## Front matter
+
+Every spec and every ticket opens with YAML front matter. Tickets:
+
+```yaml
+---
+id: 0007
+title: Materializar servico-credito e a PoliticaCredito v1
+state: open            # open | closed
+triage: ready-for-agent
+spec: docs/specs/slice-1-straight-through-approval.md
+blocked_by: [0005]     # ticket ids; omit or [] when none
+assignee:              # empty until claimed
+created: 2026-09-02
+---
+```
+
+Specs carry `title`, `state`, `triage` and `created`; the rest is ticket-only. When a ticket closes,
+add `closed: YYYY-MM-DD` and set `state: closed`.
+
+`triage` takes one of the five canonical values in `docs/agents/triage-labels.md`.
+
+## Ticket template
+
+O corpo mínimo de um ticket. Um ticket é uma fatia vertical executável, **não** um mini design
+document: ele não repete o raciocínio da spec, aponta para ela.
+
+```markdown
+# NNNN — <título>
+
+## Objetivo
+
+O comportamento vertical que este ticket faz funcionar, do ponto de vista de quem usa — não uma lista
+de camadas a construir.
+
+## Acceptance Criteria
+
+- [ ] critério verificável derivado da spec, referenciando o AC de origem quando houver
+- [ ] ...
+
+## Blocked by
+
+Os tickets que genuinamente gateiam este, ou "nenhum — pode começar imediatamente".
+
+## Out of Scope
+
+Quando necessário para impedir que este ticket antecipe trabalho de outro.
+
+## Testing
+
+Quais seams da spec este tracer bullet exercita.
+```
+
+Não inclua antecipadamente paths, nomes de classe ou DDL que o ticket deve descobrir durante a
+implementação — exceto quando a spec já os tornou contrato.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
-
-Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
+- **Create a spec**: write `docs/specs/<slug>.md` with front matter and the spec body.
+- **Create a ticket**: allocate the next id, write `docs/tickets/NNNN-<slug>.md`, and set `spec:` to
+  the spec it implements.
+- **Read a spec or ticket**: read the file, including its `## Log`.
+- **List**: search the front matter. Open tickets ready for an agent, for example, are the files under
+  `docs/tickets/` matching both `state: open` and `triage: ready-for-agent`; ripgrep with
+  `--multiline` or two passes intersected. There is no query language here — that is the accepted cost.
+- **Comment**: append to the `## Log` section at the end of the file, newest last, each entry headed
+  `### YYYY-MM-DD — <author>`. Never rewrite an earlier entry; the log is append-only, and git holds
+  the rest of the history.
+- **Apply / remove a triage label**: edit the `triage:` field.
+- **Close**: set `state: closed`, add `closed:`, and append a `## Log` entry saying why. Keep the file.
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests;
+`/triage` reads this flag.)_
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
-
-- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
-- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
-- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
-
-GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
+The PR remains the **review** surface: because specs and tickets are files, a change to either travels
+in a normal PR and is reviewed as a diff, next to the code it governs.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a GitHub issue.
+Write the markdown file under `docs/specs/` or `docs/tickets/` as above. Publishing means the file
+exists on a branch; the PR is where it gets reviewed.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`.
+Read `docs/tickets/NNNN-<slug>.md`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+Used by `/wayfinder`. The **map** is a single file with **child** tickets.
 
-- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
-- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: GitHub's **native issue dependencies**, the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only, the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
-- **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
-- **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Map**: `docs/tickets/MAP.md`, holding the Notes / Decisions-so-far / Fog sections plus a task list
+  of its children in map order.
+- **Child ticket**: a normal ticket file carrying `map: MAP` in its front matter and listed in the
+  map's task list. Its `triage` still comes from the canonical five; the wayfinder type goes in a
+  `type:` field (`research` / `prototype` / `grilling` / `task`).
+- **Blocking**: the `blocked_by:` front-matter list. A ticket is unblocked when every id it names has
+  `state: closed`.
+- **Frontier query**: the map's children with `state: open`, dropping any with an unclosed id in
+  `blocked_by` or a non-empty `assignee`; first in map order wins.
+- **Claim**: set `assignee:` — the session's first write.
+- **Resolve**: append the answer to the ticket's `## Log`, set `state: closed` with `closed:`, then
+  append a pointer to the map's Decisions-so-far naming the ticket file.
+
+## Why files instead of GitHub issues
+
+The spec and the code it governs evolve in the same pull request, review happens on the diff, and the
+whole history is in git rather than in a service. An agent working offline reads the tracker with the
+same tools it reads the codebase.
+
+The cost is accepted deliberately: no issue UI, no cross-repo linking, no notifications, and listing
+or filtering is grep over front matter rather than a query. If those become the bottleneck, moving back
+is a matter of rewriting this file and importing the markdown.

@@ -1,10 +1,16 @@
 # fkmanager-360-poc
 
+## Documentary precedence
+
+`CONTEXT.md` and `CONTEXT-MAP.md` define the ubiquitous language and the domain boundaries. ADRs define durable architectural decisions. A spec defines the behaviour and scope of one feature within those constraints. Tickets decompose a spec for execution.
+
+A spec or a ticket must not contradict an ADR or the ubiquitous language. Changing either means changing the appropriate upper source first, explicitly — a ticket never decides architecture or renames a domain concept for convenience.
+
 ## Agent skills
 
 ### Issue tracker
 
-Issues live as GitHub issues in `fkazeredo/fkmanager-360-poc`, managed with the `gh` CLI. Specs and implementation work are both tracked there. See `docs/agents/issue-tracker.md`.
+Specs and tickets live as markdown files under `docs/specs/` and `docs/tickets/`, versioned with the code and reviewed as diffs. This repo does not use GitHub issues. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
