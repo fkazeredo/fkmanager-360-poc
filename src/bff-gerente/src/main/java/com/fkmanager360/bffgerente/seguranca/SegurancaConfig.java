@@ -1,0 +1,68 @@
+package com.fkmanager360.bffgerente.seguranca;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+
+/**
+ * bff-gerente e OAuth2 confidential client conduzindo Authorization Code + PKCE + OIDC contra
+ * servidor-autorizacao (ADR-0015). O browser recebe apenas o cookie de sessao -- access token,
+ * refresh token e client secret nunca chegam ao Angular. A sessao vive em Redis via Spring
+ * Session (configuracao em application.yml), para que o BFF escale sem sticky session e
+ * sobreviva a restart da instancia que a originou (AC20).
+ */
+@Configuration
+public class SegurancaConfig {
+
+    @Bean
+    SecurityFilterChain filterChain(HttpSecurity http, ClientRegistrationRepository clientRegistrationRepository) throws Exception {
+        OAuth2AuthorizationRequestResolver resolverComPkce = pkceObrigatorio(clientRegistrationRepository);
+
+        http
+                .authorizeHttpRequests(autorizacao -> autorizacao
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .anyRequest().authenticated())
+                .oauth2Login(oauth2 -> oauth2.authorizationEndpoint(
+                        endpoint -> endpoint.authorizationRequestResolver(resolverComPkce)))
+                // /api/** e chamado por fetch/XHR do Angular: um 401 permite a SPA decidir a
+                // navegacao (ela mesma redireciona o browser para o login); um 302 devolveria
+                // HTML de login para dentro de uma chamada de API, que a SPA nao sabe tratar.
+                .exceptionHandling(exceptions -> exceptions.defaultAuthenticationEntryPointFor(
+                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
+                        PathPatternRequestMatcher.withDefaults().matcher("/api/**")))
+                .logout(logout -> logout
+                        .logoutUrl("/logout")
+                        .logoutSuccessHandler((request, response, authentication) ->
+                                response.setStatus(HttpStatus.NO_CONTENT.value())))
+                .csrf(csrf -> csrf
+                        // Convencao do Angular: le o cookie XSRF-TOKEN (nao HttpOnly, para o JS
+                        // conseguir ler) e devolve como header X-XSRF-TOKEN.
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()));
+
+        return http.build();
+    }
+
+    /**
+     * PKCE e obrigatorio mesmo sendo o bff-gerente um client confidencial: "sem PKCE, o ticket
+     * nao terminou" (ticket #0001). O resolver padrao do Spring Security so aplica PKCE
+     * automaticamente para clients publicos -- aqui ele e forcado explicitamente.
+     */
+    private static OAuth2AuthorizationRequestResolver pkceObrigatorio(ClientRegistrationRepository clientRegistrationRepository) {
+        var resolver = new DefaultOAuth2AuthorizationRequestResolver(
+                clientRegistrationRepository, OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI);
+        resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
+        return resolver;
+    }
+}
