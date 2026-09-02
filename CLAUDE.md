@@ -6,6 +6,10 @@
 
 A spec or a ticket must not contradict an ADR or the ubiquitous language. Changing either means changing the appropriate upper source first, explicitly — a ticket never decides architecture or renames a domain concept for convenience.
 
+## Git workflow
+
+GitFlow. `main` is the release line; `develop` is the integration line and the base for all new work. Neither takes a direct commit — everything enters by Pull Request into `develop` (except `hotfix/*`, which targets `main`). Branch types: `feature/NNNN-<slug>`, `spec/<slug>`, `docs/<slug>`, `bugfix/<slug>`, `release/*`, `hotfix/*`. See `docs/adr/0022-gitflow-como-estrategia-de-branching.md`.
+
 ## Agent skills
 
 ### Issue tracker
