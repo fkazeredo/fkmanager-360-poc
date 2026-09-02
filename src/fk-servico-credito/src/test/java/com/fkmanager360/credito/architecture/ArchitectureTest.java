@@ -4,9 +4,11 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import org.junit.jupiter.api.Test;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * S8: a regra de dependencia desde o primeiro codigo (ADR-0020). Guardrail estrutural
@@ -41,15 +43,44 @@ class ArchitectureTest {
                     .resideInAnyPackage("jakarta.persistence..", "org.hibernate..");
 
     /**
-     * Este ticket materializa Credito <b>sem</b> persistencia (ADR-0010, ADR-0014). Enquanto nao
-     * houver estado duravel, nenhuma classe deste servico toca JDBC, DataSource ou Flyway -- e o
-     * dia em que credito_db nascer, esta regra cai junto com a spec que a justificar, e nao por
-     * descuido.
+     * ADR-0020 e S8 exigem ausencia de JPA, Kafka e Rabbit dentro do dominio -- a mesma frase,
+     * tres tecnologias. Este ticket nao introduz nenhuma das tres, mas a guarda precisa existir
+     * desde o primeiro codigo do modulo (o proprio criterio de S8), e nao so ser adicionada no
+     * slice que introduzir mensageria (achado C1 do review de #0002: a regra estava presente para
+     * JPA, ausente para Kafka/Rabbit, num modulo que ainda nao usa nenhum dos tres).
      */
     @ArchTest
-    static final ArchRule enquanto_nao_ha_estado_duravel_nao_ha_persistencia =
+    static final ArchRule dominio_nao_depende_de_kafka_ou_rabbit =
+            noClasses().that().resideInAPackage("..domain..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "org.springframework.kafka..", "org.apache.kafka..",
+                            "org.springframework.amqp..", "com.rabbitmq..");
+
+    /**
+     * Enquanto nao houver estado duravel de Credito (ADR-0010, ADR-0014), nenhuma classe deste
+     * servico referencia JDBC, DataSource ou Flyway. O que esta regra prova, precisamente: nenhum
+     * <b>bytecode</b> deste modulo importa esses tipos. O que ela NAO prova, sozinha: que
+     * persistencia nao possa ser introduzida por outro caminho -- um starter Spring Boot com
+     * autoconfiguracao por classpath, ou um recurso de migration adicionado sem nenhuma classe
+     * Java nova referenciando-o, nao deixariam rastro aqui (achado C2 do review de #0002). O
+     * teste companheiro abaixo fecha essa lacuna, checando o RECURSO, nao a referencia de classe.
+     */
+    @ArchTest
+    static final ArchRule enquanto_nao_ha_estado_duravel_nenhuma_classe_referencia_jdbc_ou_flyway =
             noClasses().should().dependOnClassesThat()
                     .resideInAnyPackage("java.sql..", "javax.sql..", "org.springframework.jdbc..", "org.flywaydb..");
+
+    /**
+     * Companheiro da regra acima: prova ausencia do proprio recurso de migration no classpath, e
+     * nao apenas ausencia de referencia de classe a ele. Adicionar Flyway + migrations SQL sem
+     * nenhuma classe Java nova (autoconfiguracao do Spring Boot faz exatamente isso a partir de
+     * {@code spring.datasource.*} e de arquivos em {@code db/migration}) passaria pela regra
+     * ArchUnit acima incolume; este teste e o que de fato o pegaria.
+     */
+    @Test
+    void enquantoNaoHaEstadoDuravel_nenhumaMigrationEstaNoClasspath() {
+        assertThat(getClass().getClassLoader().getResource("db/migration")).isNull();
+    }
 
     /**
      * ADR-0011: entidades de dominio Java nunca atravessam bounded contexts. A separacao em

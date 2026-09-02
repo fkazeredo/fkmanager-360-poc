@@ -24,6 +24,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,6 +51,7 @@ class AtendimentoSegurancaTest {
 
     private static final String AUD = JwtDecoderTestConfig.EXPECTED_AUDIENCE;
     private static final String CONTAS = "/clientes/1/contas";
+    private static final String DIREITO = "/clientes/1/contas/10001/direito-de-atendimento";
     private static final String CONTEXTO = "/clientes/1/contas/10001/contexto-atendimento";
 
     @Autowired
@@ -88,6 +90,11 @@ class AtendimentoSegurancaTest {
     @Test
     void contextoAtendimento_semToken_e401() throws Exception {
         mockMvc.perform(get(CONTEXTO)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void direitoDeAtendimento_semToken_e401() throws Exception {
+        mockMvc.perform(get(DIREITO)).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -165,6 +172,51 @@ class AtendimentoSegurancaTest {
         // token e nunca do que o chamador escreveu na URL.
         mockMvc.perform(get(CONTEXTO).header("Authorization", "Bearer " + tokenDeGerente("gerente.b")))
                 .andExpect(status().isForbidden());
+    }
+
+    // --- DireitoDeAtendimento: o primitivo estreito que servico-credito consome (I4) --------
+
+    @Test
+    void direitoDeAtendimento_comDireitoAtual_devolve204SemCorpo() throws Exception {
+        mockMvc.perform(get(DIREITO).header("Authorization", "Bearer " + tokenDeGerente("gerente.a")))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void direitoDeAtendimento_semDireitoAtual_e403_eNenhumaChamadaAoCoreLegado() throws Exception {
+        when(vinculos.existeVinculo(any(), any())).thenReturn(false);
+
+        mockMvc.perform(get(DIREITO).header("Authorization", "Bearer " + tokenDeGerente("gerente.a")))
+                .andExpect(status().isForbidden());
+
+        verify(contas, never()).buscarContasDoCliente(any());
+    }
+
+    @Test
+    void direitoDeAtendimento_contaQueNaoEDoCliente_e404() throws Exception {
+        mockMvc.perform(get("/clientes/1/contas/99999/direito-de-atendimento")
+                        .header("Authorization", "Bearer " + tokenDeGerente("gerente.a")))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * A prova estrutural do I4: a operacao que servico-credito consome NUNCA toca a porta de
+     * dados mestres, sucesso ou falha. E o que garante que uma indisponibilidade da consulta
+     * cadastral do Cliente nao pode mais derrubar a leitura do LimiteChequeEspecialVigente --
+     * diferente de {@code /contexto-atendimento}, que precisa mesmo dos dados mestres para a
+     * composicao do bff-gerente e por isso os consulta.
+     */
+    @Test
+    void direitoDeAtendimento_nuncaConsultaDadosMestres_sucessoOuFalha() throws Exception {
+        mockMvc.perform(get(DIREITO).header("Authorization", "Bearer " + tokenDeGerente("gerente.a")))
+                .andExpect(status().isNoContent());
+        verify(dadosMestres, never()).buscarDadosMestres(any());
+
+        mockMvc.perform(get("/clientes/1/contas/99999/direito-de-atendimento")
+                        .header("Authorization", "Bearer " + tokenDeGerente("gerente.a")))
+                .andExpect(status().isNotFound());
+        verify(dadosMestres, never()).buscarDadosMestres(any());
     }
 
     // --- Contexto de atendimento ------------------------------------------------------------

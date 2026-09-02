@@ -208,6 +208,34 @@ class CreditoLegadoAclAdapterTest {
                 .isInstanceOf(InvalidCoreLegadoResponseException.class);
     }
 
+    // --- I3: parsing STRICT -- datas impossiveis nao sao silenciosamente corrigidas ----------
+
+    @Test
+    void dataValida_eAceita() {
+        stubSucesso("000000000500000", "01", "1", "20260115");
+
+        assertThat(adapter.consultar(CONTA)).isPresent();
+    }
+
+    @Test
+    void vinteENoveDeFevereiro_emAnoBissexto_eAceita() {
+        // 2028 e bissexto.
+        stubSucesso("000000000500000", "01", "1", "20280229");
+
+        assertThat(adapter.consultar(CONTA)).isPresent();
+    }
+
+    @Test
+    void vinteENoveDeFevereiro_emAnoNaoBissexto_eRespostaInvalida_naoCorrigidoSilenciosamente() {
+        // 2025 nao e bissexto: 29/02/2025 nao existe. Sob o resolver SMART (default), isto
+        // resolveria silenciosamente para 28/02/2025 em vez de lancar -- exatamente a assinatura
+        // classica de um registro host corrompido que o parsing STRICT precisa recusar.
+        stubSucesso("000000000500000", "01", "1", "20250229");
+
+        assertThatThrownBy(() -> adapter.consultar(CONTA))
+                .isInstanceOf(InvalidCoreLegadoResponseException.class);
+    }
+
     // --- COD-RET e campos ausentes -----------------------------------------------------------
 
     @Test

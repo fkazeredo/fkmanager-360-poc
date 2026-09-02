@@ -56,9 +56,11 @@ Registro de solicitação, `ContextoDecisaoCredito`, `PoliticaCredito` e qualque
 
 ## Testing
 
-S2 (orquestração da leitura), S4 (tradução do contrato host-centric para limite, situação da conta e
-classificação de risco base), S5 (deriva entre o adapter de `Credito` e o simulador), S6 (`403` e
-Token Exchange encadeado).
+S2 (orquestração da leitura, incluindo o primitivo `ConfirmarDireitoDeAtendimento` separado da
+composição rica), S4 (tradução do contrato host-centric para limite, situação da conta e
+classificação de risco base), S5 (deriva entre o adapter de `Credito` e o simulador), S6 (`403`,
+`404`, a taxonomia completa de erro na borda do BFF, e o Token Exchange encadeado com política de
+target único e scope explícito).
 
 S3 **pequeno e apenas em `servico-carteira-clientes`**, cobrindo exclusivamente a nova consulta
 `existeVinculo`: o ticket não introduz schema, migration nem database, mas essa query passa a ser o
@@ -68,7 +70,9 @@ indevido. Reusa o harness Testcontainers do #0001, sem infraestrutura nova. **Ne
 
 ## Log
 
-**2026-09-02** — Implementação concluída e verificada contra a stack real (`docker compose up`),
+### 2026-09-02 — franklin.azeredo
+
+Implementação concluída e verificada contra a stack real (`docker compose up`),
 não apenas por teste isolado.
 
 **A decisão estruturante do ticket.** O direito de atendimento persistido é `gerente ↔ cliente`; o
@@ -124,17 +128,97 @@ composição), S7 (jornada 1 estendida, nenhuma jornada nova), S8 (ArchUnit no m
 `Credito` materializado: vocabulário movido de `CONTEXT.md` raiz para
 `docs/contextos/credito/CONTEXT.md`; `CONTEXT-MAP.md` e `docs/agents/domain.md` atualizados.
 
-**Overfetch reconhecido, não silenciado.** `contexto-atendimento` devolve dados cadastrais porque o
-BFF os usa para compor a tela; `servico-credito` declara um record só com `clienteId` e nunca
-desserializa o resto, mas os dados trafegam. Separar uma operação de autorização pura exigiria
-evidência que este ticket não tem — registrado aqui para que a decisão seja revisitável.
+**Overfetch — inicialmente ACCEPTED TRADEOFF, RESOLVED no code review desta mesma data (ver entrada
+seguinte no Log).** A primeira versão desta implementação aceitava que `contexto-atendimento` devolvia
+dados cadastrais que `servico-credito` recebia na rede sem usar. O review trouxe evidência concreta de
+um custo real além do overfetch em si — acoplamento de disponibilidade: uma falha na consulta de dados
+mestres do Cliente dentro de `CarteiraClientes` derrubava a leitura do limite, mesmo essa consulta
+sendo dispensável para Credito. A correção separou as duas operações: `/direito-de-atendimento` (nova,
+`204` sem corpo) é o primitivo de autorização que `servico-credito` consome; `/contexto-atendimento`
+continua rica, e passa a ser usada apenas pelo `bff-gerente` para compor a tela (AC30).
 
 **Não implementado (fora de escopo, fecha em #0003+):** `SolicitacaoAumentoLimite`,
 `ContextoDecisaoCredito`, `PoliticaCredito`, `MotorDecisaoCredito`, `credito_db`, Outbox,
 idempotência, efetivação, dispatcher, reconciliação, callback, e o control plane do simulador.
 
-**Status: aguardando code review final.** A implementação está completa e verificada, e os
-Acceptance Criteria acima estão marcados porque cada um tem evidência executável. O ticket permanece
-`open` deliberadamente: o fechamento definitivo só acontece depois do `/code-review` sobre
-`develop...feature/0002-selecao-de-conta-e-limite-vigente` e do tratamento dos achados, no mesmo
-padrão do #0001 — onde a revisão encontrou cinco IMPORTANT que a suíte verde não pegava.
+**Status nesta data: aguardando code review.** Ver a entrada seguinte no Log para o resultado da
+revisão e das correções.
+
+### 2026-09-02 — franklin.azeredo
+
+`/code-review` sobre `develop...feature/0002-selecao-de-conta-e-limite-vigente` (delta completo, não
+só o commit inicial): 1 BLOCKER, 10 IMPORTANT, 5 COSMETIC, 1 ACCEPTED TRADEOFF. Todos corrigidos nesta
+mesma data (commit `fix: address ticket 0002 code review findings`).
+
+**BLOCKER — corrida de requisições no Angular.** `carregarContas`/`selecionarConta` faziam
+`.subscribe()` direto por seleção, sem cancelamento: uma resposta lenta para uma seleção anterior
+podia chegar depois de uma nova seleção e sobrescrever a tela — o limite autoritativo de uma conta
+aparecendo sob outra. Corrigido com `switchMap` sobre `toObservable(cliente)` e sobre um
+`Subject<ContaResumo>` de seleção, mais `takeUntilDestroyed()` para cleanup. Provado com o cenário
+adversarial exato (conta A pendente → conta B selecionada → resposta B chega → resposta A chega depois
+→ tela mostra só B), usando `TestRequest.cancelled` do Angular como evidência de que a assinatura
+antiga foi genuinamente cancelada, não apenas ignorada por sorte de timing.
+
+**A mudança estrutural do round: separar autorização estreita de composição rica.** O overfetch que a
+primeira versão aceitou como tradeoff escondia um custo real — acoplamento de disponibilidade: Credito
+dependia indiretamente da consulta de dados mestres do Cliente, que nunca usa. Nasceu
+`ConfirmarDireitoDeAtendimento` em `CarteiraClientes`, o primitivo de autorização (vínculo local +
+pertinência da conta, sem nada cadastral), exposto em `GET .../direito-de-atendimento` → `204`.
+`ConsultarContextoAtendimento` passou a compor esse primitivo com a consulta de dados mestres, sem
+duplicar a chamada ao Core. `servico-credito` migrou para o endpoint estreito; o endpoint rico
+`/contexto-atendimento` continua existindo, só para o `bff-gerente`. Efeito colateral: a classe de
+defeito "`clienteId` malformado devolvido pelo peer" (que exigia tratamento na desserialização do
+corpo rico) deixou de existir estruturalmente, porque o endpoint que `Credito` consome não tem corpo.
+
+**Canonicalização de `ContaId`.** `CarteiraClientes` comparava contas por igualdade de string
+sem normalizar; `Credito` normalizava via `HostFormat.toCodigoHost`. O mesmo número de conta,
+padded ou não, podia ser 404 num contexto e resolver no outro. Corrigido no próprio value object —
+o construtor compacto canonicaliza (remove zero-padding) antes de armazenar — nos dois contextos.
+
+**Taxonomia de erro completa no `bff-gerente`.** Antes, só 403/404/5xx tinham handler; um 400 ou 401
+de qualquer backend escapava para 500 genérico. Agora: entrada inválida na própria borda do BFF → 400
+(`clienteId`/`contaId` validados antes de qualquer chamada remota); 401 de um Resource Server (token
+delegado recusado) → 502, nunca 401 — a sessão do browser continua válida, e reencaminhar como 401
+confundiria "usuário precisa logar de novo" com "a cadeia de Token Exchange quebrou"; 403/404 →
+atravessam sem reinterpretação; qualquer 4xx inesperado, corpo `2xx` incompleto, ou 5xx → 502/503.
+
+**Limite nunca vira zero por ausência.** `long limiteChequeEspecialVigente` virou `Long`: um corpo sem
+o campo desserializava silenciosamente para `0`, que é exatamente o valor que o domínio documenta como
+"Cliente sem cheque especial" — a única leitura que precisava ser distinguível de ausência era a que o
+primitivo colapsava com ela. Ausência agora é `DependenciaRespostaInvalidaException` → 502.
+
+**Parsing `STRICT` de `datAtuLim`.** O resolver `SMART` (default) corrigia silenciosamente datas
+impossíveis — `29/02/2025` (ano não bissexto) virava `28/02/2025` em vez de lançar, exatamente a
+assinatura de um registro host corrompido. `ResolverStyle.STRICT` fecha isso; testado com data válida,
+29/02 em ano bissexto (aceito) e 29/02 em ano comum (rejeitado).
+
+**Evidência real para AC30, no lugar da vácua.** O teste anterior afirmava "o BFF não fala com o Core"
+subindo um `WireMockServer` cujo endereço nenhum componente conhecia — verde por construção.
+Substituído por duas provas falsificáveis: nenhuma classe de `fk-simulador-core-legado` no classpath
+do `bff-gerente` (o módulo não é dependência Maven) e o único conjunto de beans `RestClient` do
+contexto são exatamente os dois destinos autorizados.
+
+**Token Exchange: exatamente um destino, scope sempre explícito.** `TokenExchangePolicyAuthenticationProvider`
+aceitava zero destinos (caindo no default do Spring, que podia coincidir com uma audience válida) e
+tratava scope ausente como "sem verificação" — dependência implícita de um comportamento do provider
+padrão que a própria classe não controla. Agora exige exatamente um destino e scope explícito sempre
+contido no subject token, com `invalid_target`/`invalid_scope` e nenhum token emitido nos negativos
+(target ausente, dois destinos simultâneos mesmo ambos permitidos isoladamente, scope ausente).
+
+**Orçamento de timeout documentado.** Os timeouts eram valores isolados por serviço, alguns menores que
+o pior caso declarado do próprio destino que chamavam — o BFF podia desistir de `servico-credito`
+exatamente quando este estava prestes a responder. Redesenhado bottom-up (CoreLegado e Token Exchange
+como folhas de 5s; cada consumidor = pior caso declarado do destino + 3s de margem), documentado como
+tabela no Javadoc de `TokenExchangeConfig`, e as chamadas de Token Exchange — que não tinham timeout
+algum antes — ganharam um explícito.
+
+**Verificação completa.** `./mvnw clean verify` sobre o reactor inteiro: 222 testes Java (13
+`fk-servidor-autorizacao`, 95 `fk-servico-carteira-clientes`, 76 `fk-servico-credito`, 23
+`fk-bff-gerente`, 15 `fk-simulador-core-legado`); 14 testes Angular; 4 contratos OpenAPI validados;
+auditoria de segredos sem achados; busca por nomes residuais (`LimiteVigenteResponse`, provider antigo,
+`contexto-atendimento` em Credito) sem ocorrências; `docker compose down -v` + rebuild das 6 imagens +
+cold start dos 8 serviços, todos saudáveis; logs de todos os serviços sem erro ou warning; 9 testes
+Playwright contra a stack real recém-construída, incluindo a jornada estendida de #0002 completa.
+
+**Reavaliação do ACCEPTED TRADEOFF original (overfetch).** RESOLVED, não permanece como tradeoff — ver
+a mudança estrutural acima.

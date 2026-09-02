@@ -31,8 +31,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * S6 da composicao (AC30): o modelo de apresentacao da tela de atendimento e montado pelo
- * bff-gerente a partir de servico-carteira-clientes e servico-credito, e o BFF nao emite nenhuma
- * chamada ao simulador-core-legado.
+ * bff-gerente a partir de servico-carteira-clientes e servico-credito.
+ *
+ * <p>A ausencia de chamada ao simulador-core-legado NAO e provada aqui com um WireMock cujo
+ * endereco nenhum componente conhece -- isso seria verde por construcao, nao falsificavel
+ * (achado I7 do review de #0002). A prova estrutural esta em
+ * {@link com.fkmanager360.bffgerente.config.TopologiaDeDependenciasTest}: nenhuma classe do
+ * simulador no classpath do BFF, e o unico conjunto de {@code RestClient} configurados sao os
+ * dois destinos autorizados.
  *
  * <p>O Token Exchange em si ja e provado por {@code BffSegurancaTest} e pelo S6 do
  * servidor-autorizacao; aqui ele e substituido por um resolver stubado para que o objeto do teste
@@ -66,22 +72,17 @@ class ComposicaoAtendimentoTest {
 
     private static WireMockServer carteiraClientes;
     private static WireMockServer credito;
-    private static WireMockServer simuladorCoreLegado;
 
     @BeforeAll
     static void subirServicos() {
         carteiraClientes = novoServidor();
         credito = novoServidor();
-        // O simulador so existe neste teste para poder afirmar que ele NAO e chamado: um stub
-        // que aceita tudo, e cuja unica asercao e nunca ter recebido requisicao alguma.
-        simuladorCoreLegado = novoServidor();
     }
 
     @AfterAll
     static void pararServicos() {
         carteiraClientes.stop();
         credito.stop();
-        simuladorCoreLegado.stop();
     }
 
     private static WireMockServer novoServidor() {
@@ -106,7 +107,6 @@ class ComposicaoAtendimentoTest {
     void comportamentoPadrao() {
         carteiraClientes.resetAll();
         credito.resetAll();
-        simuladorCoreLegado.resetAll();
 
         when(tokenResolver.tokenPara(eq("carteira-clientes-exchange"), any(), any(), any()))
                 .thenReturn(TOKEN_CARTEIRA);
@@ -141,14 +141,6 @@ class ComposicaoAtendimentoTest {
                 // De servico-credito: o limite que o Core reconhece agora.
                 .andExpect(jsonPath("$.limiteChequeEspecialVigente").value(500000))
                 .andExpect(jsonPath("$.consultadoEm").exists());
-    }
-
-    @Test
-    void atendimento_naoEmiteNenhumaChamadaAoSimuladorCoreLegado() throws Exception {
-        mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado())).andExpect(status().isOk());
-
-        // AC30: o BFF nao fala com o Core. Quem le o Core e a ACL do contexto dono do dado.
-        simuladorCoreLegado.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @Test
@@ -212,6 +204,68 @@ class ComposicaoAtendimentoTest {
 
         carteiraClientes.verify(0, anyRequestedFor(anyUrl()));
         credito.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    // --- I1: taxonomia de erro completa -------------------------------------------------------
+
+    @Test
+    void contaIdForaDoFormatoHost_e400_semChamarNenhumServico() throws Exception {
+        // Entrada invalida do proprio BFF: recusada na borda, antes de qualquer chamada remota
+        // que so falharia la na frente.
+        mockMvc.perform(get("/api/clientes/1/contas/abc/atendimento").with(gerenteAutenticado()))
+                .andExpect(status().isBadRequest());
+
+        carteiraClientes.verify(0, anyRequestedFor(anyUrl()));
+        credito.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @Test
+    void clienteIdForaDoFormatoHost_e400() throws Exception {
+        mockMvc.perform(get("/api/clientes/abc/contas").with(gerenteAutenticado()))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Um Resource Server recusando o token DELEGADO (401) nao pode virar 401 para o browser: a
+     * sessao do BFF continua valida, e isso confundiria "usuario precisa logar de novo" com "a
+     * cadeia de Token Exchange quebrou". Vira 502 -- taxonomia de integracao.
+     */
+    @Test
+    void tokenDelegadoRecusadoPeloResourceServer_vira502_naoReautenticaOUsuario() throws Exception {
+        carteiraClientes.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO)).willReturn(aResponse().withStatus(401)));
+
+        mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado()))
+                .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void respostaDownstreamInesperada_e502_naoErroGenerico() throws Exception {
+        // Um 400 que o backend dono do recurso devolveu por um motivo que a validacao de borda do
+        // BFF nao antecipou: falha de integracao, nao erro do usuario, e nao pode virar 500.
+        carteiraClientes.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO)).willReturn(aResponse().withStatus(400)));
+
+        mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado()))
+                .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void corpo2xxIncompletoDaCarteira_e502_naoNullPointerNemLimiteZero() throws Exception {
+        carteiraClientes.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO)).willReturn(json("""
+                {"clienteId":"1","nome":"ANA BEATRIZ SOUZA","cpfMascarado":"***.222.333-**"}
+                """)));
+
+        mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado()))
+                .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void corpo2xxComLimiteAusenteDoCredito_e502_naoVira0() throws Exception {
+        credito.stubFor(WireMock.get(urlEqualTo(PATH_LIMITE)).willReturn(json("""
+                {"contaId":"10001","consultadoEm":"2026-09-02T16:00:00Z"}
+                """)));
+
+        mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado()))
+                .andExpect(status().isBadGateway());
     }
 
     private static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder json(String corpo) {

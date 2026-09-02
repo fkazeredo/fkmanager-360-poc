@@ -16,6 +16,13 @@ import java.util.function.Supplier;
  * resposta tecnica valida carregando retorno de erro do host. Esta classe cobre so a primeira
  * metade; a segunda e o {@code COD-RET}, interpretado pelo adapter segundo a semantica da sua
  * propria operacao.
+ *
+ * <p>Copia deliberada da classe homonima de {@code servico-carteira-clientes}, pelo mesmo motivo
+ * registrado em {@link HostFormat} e em {@code AudienceValidator} (ADR-0011): a classificacao de
+ * patologia de transporte HTTP nao e vocabulario de dominio de nenhum dos dois contextos, e um
+ * modulo `commons` para compartilha-la acoplaria dois bounded contexts que a arquitetura mantem
+ * deliberadamente independentes -- inclusive para que extrair um deles para repositorio proprio
+ * continue sendo movimento mecanico (ADR-0011).
  */
 final class CoreLegadoCall {
 

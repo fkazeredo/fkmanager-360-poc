@@ -109,14 +109,14 @@ class ConsultarLimiteChequeEspecialVigenteTest {
 
     private static final class DireitoConcedidoFake implements DireitoDeAtendimentoPort {
         @Override
-        public ClienteId confirmarDireitoDeAtendimento(ClienteId clienteId, ContaId contaId) {
-            return clienteId;
+        public void confirmarDireitoDeAtendimento(ClienteId clienteId, ContaId contaId) {
+            // Retorno normal e a confirmacao: nao ha nada a devolver.
         }
     }
 
     private static final class DireitoNegadoFake implements DireitoDeAtendimentoPort {
         @Override
-        public ClienteId confirmarDireitoDeAtendimento(ClienteId clienteId, ContaId contaId) {
+        public void confirmarDireitoDeAtendimento(ClienteId clienteId, ContaId contaId) {
             throw new DireitoDeAtendimentoAusenteException("sem direito de atendimento atual");
         }
     }

@@ -195,7 +195,10 @@ class AutorizacaoEndToEndTest {
                         .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
                         // "resource" (RFC 8693) exige URI absoluta; "audience" aceita nome logico
                         // -- servico-carteira-clientes e identidade logica, nao uma URL.
-                        .param("audience", "servico-carteira-clientes"))
+                        .param("audience", "servico-carteira-clientes")
+                        // Scope explicito e obrigatorio nesta plataforma (I8 do review de #0002):
+                        // omitir o parametro nao e mais um atalho valido.
+                        .param("scope", "carteira.leitura"))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -229,6 +232,83 @@ class AutorizacaoEndToEndTest {
 
         String corpo = exchangeResult.getResponse().getContentAsString();
         assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_target");
+        assertThat(corpo).doesNotContain("access_token");
+    }
+
+    /**
+     * Achado I8 do review de #0002: nenhum target (nem {@code resource}, nem {@code audience}) e
+     * recusado -- nao apenas target fora da allow-list. Sem esta regra, a politica confiaria no
+     * fallback do Spring Authorization Server (emitir {@code aud = client_id}), que pode
+     * coincidir com a audience esperada por algum Resource Server e contornar a allow-list.
+     */
+    @Test
+    void tokenExchange_semNenhumTarget_eRecusadoComInvalidTarget_semEmitirToken() throws Exception {
+        String accessToken = tokenDeLoginDoGerente();
+
+        MvcResult exchangeResult = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", accessToken)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("scope", "carteira.leitura"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        String corpo = exchangeResult.getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_target");
+        assertThat(corpo).doesNotContain("access_token");
+    }
+
+    /**
+     * Achado I8: dois targets numa unica troca sao recusados mesmo quando CADA UM deles,
+     * isoladamente, esta na allow-list do client -- bff-gerente pode alcancar
+     * servico-carteira-clientes OU servico-credito, nunca os dois na mesma troca. Sem esta regra,
+     * o resultado seria exatamente o "token de usuario multi-audience" que ADR-0015 declara nao
+     * existir na plataforma: uma unica credencial aceita por mais de um Resource Server.
+     */
+    @Test
+    void tokenExchange_comDoisTargetsSimultaneos_eRecusadoComInvalidTarget_mesmoAmbosPermitidosIsoladamente()
+            throws Exception {
+        String accessToken = tokenDeLoginDoGerente();
+
+        MvcResult exchangeResult = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", accessToken)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("audience", "servico-carteira-clientes")
+                        .param("audience", "servico-credito")
+                        .param("scope", "carteira.leitura"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        String corpo = exchangeResult.getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_target");
+        assertThat(corpo).doesNotContain("access_token");
+    }
+
+    /**
+     * Achado I8: scope ausente e recusado explicitamente, e nao tratado como "os scopes do
+     * subject token". A politica anterior confiava that o provider padrao do Spring Authorization
+     * Server nao herda scope algum quando nenhum e pedido -- verdade hoje, mas uma dependencia
+     * implicita de um comportamento upstream que esta classe nao controla. Exigir o parametro
+     * remove essa dependencia.
+     */
+    @Test
+    void tokenExchange_semScopeAlgum_eRecusadoComInvalidScope_semEmitirToken() throws Exception {
+        String accessToken = tokenDeLoginDoGerente();
+
+        MvcResult exchangeResult = mockMvc.perform(post("/oauth2/token")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthHeader())
+                        .param("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+                        .param("subject_token", accessToken)
+                        .param("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+                        .param("audience", "servico-carteira-clientes"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        String corpo = exchangeResult.getResponse().getContentAsString();
+        assertThat((String) JsonPath.read(corpo, "$.error")).isEqualTo("invalid_scope");
         assertThat(corpo).doesNotContain("access_token");
     }
 

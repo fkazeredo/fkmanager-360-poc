@@ -141,20 +141,83 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
+  /clientes/{clienteId}/contas/{contaId}/direito-de-atendimento:
+    get:
+      operationId: confirmarDireitoDeAtendimento
+      tags: [atendimento]
+      summary: Confirma o direito de atendimento sobre uma conta, sem dado cadastral algum
+      description: >-
+        A operacao estreita de autorizacao (AC23): confirma que o gerente autenticado tem
+        vinculo atual com o Cliente e que a conta pedida pertence de fato a ele segundo o
+        CoreLegado, sem devolver nome, CPF ou qualquer outro dado cadastral.
+
+        E o que fk-servico-credito consome para continuar a operacao (AC21) -- por nao invocar a
+        consulta de dados mestres do Cliente, uma indisponibilidade dessa consulta cadastral
+        nunca pode bloquear a leitura do LimiteChequeEspecialVigente. fk-bff-gerente, que precisa
+        do nome e do CPF para compor a tela, usa a operacao rica em
+        `/contexto-atendimento` (AC30).
+      security:
+        - bearerJwt: [carteira.leitura]
+      parameters:
+        - $ref: "#/components/parameters/ClienteIdPath"
+        - name: contaId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{1,10}$"
+          description: Identificador da ContaCorrente, sem zero-padding.
+      responses:
+        "204":
+          description: >-
+            O gerente tem direito de atendimento atual sobre o Cliente, e o CoreLegado confirma
+            que a conta e dele. Sem corpo: nenhum consumidor precisa de mais do que a resposta
+            binaria -- os dois identificadores ja vieram no caminho da propria requisicao.
+        "401":
+          description: Sem token valido para este Resource Server.
+        "403":
+          description: >-
+            Sem direito de atendimento atual sobre aquele Cliente -- e NENHUMA chamada ao
+            CoreLegado e emitida (AC23).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: >-
+            A conta nao esta entre as que o CoreLegado reconhece para aquele Cliente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "502":
+          description: fk-simulador-core-legado respondeu algo que a ACL nao sabe interpretar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: fk-simulador-core-legado indisponivel.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "504":
+          description: Timeout ao consultar fk-simulador-core-legado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
   /clientes/{clienteId}/contas/{contaId}/contexto-atendimento:
     get:
       operationId: consultarContextoAtendimento
       tags: [atendimento]
       summary: Contexto de atendimento de uma conta -- identidade do Cliente e a conta atendida
       description: >-
-        Operacao com dois consumidores: fk-bff-gerente, que usa tudo para compor a tela de
-        atendimento, e fk-servico-credito, que usa apenas clienteId e o proprio fato de ter
-        recebido 200 em vez de 403 antes de ler qualquer coisa no CoreLegado (AC23, AC30).
-
-        Ha overfetch reconhecido do lado de Credito, que recebe na rede dados cadastrais que nao
-        desserializa nem usa. Separar uma operacao de autorizacao pura exigiria evidencia que este
-        ticket ainda nao tem, e o consumidor que justifica a forma rica -- a composicao de tela --
-        e real hoje.
+        Operacao rica, consumida por fk-bff-gerente para compor a tela de atendimento com nome,
+        CPF e conta (AC30). fk-servico-credito NAO consome esta operacao -- usa a operacao
+        estreita `/direito-de-atendimento`, exatamente para nao ficar acoplado a
+        disponibilidade da consulta cadastral que ele nunca usa.
       security:
         - bearerJwt: [carteira.leitura]
       parameters:

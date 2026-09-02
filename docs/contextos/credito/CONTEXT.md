@@ -86,6 +86,15 @@ pertencem à SolicitacaoAumentoLimite, porque respondem "quem podia operar", e n
 se decidiu".
 _Evitar_: Snapshot, Dados do cliente, Payload da proposta
 
+**SituacaoConta**:
+A situação da ContaCorrente reduzida à pergunta que a PoliticaCredito precisa fazer: regular, ou
+não. O CoreLegado mantém uma gradação mais fina (`SIT-CTA`: regular, bloqueada, encerrada); a ACL
+própria de Credito traduz qualquer código diferente de regular para irregular — inclusive um
+código que o host venha a introduzir depois, porque o desconhecido nunca deve virar "regular" por
+omissão. Não é apresentada ao GerenteRelacionamento como texto do host: o que a decisão comunica é
+o MotivoDecisaoCredito (`CONTA_NAO_ELEGIVEL`), nunca o status bruto.
+_Evitar_: SIT-CTA, Status da conta, Situação cadastral
+
 **ClassificacaoRiscoCreditoBase**:
 Classificação de risco simples que o CoreLegado já mantém para a operação bancária corrente —
 BAIXO, MEDIO ou ALTO —, consultada por Credito pela sua própria ACL (ADR-0004) e congelada no

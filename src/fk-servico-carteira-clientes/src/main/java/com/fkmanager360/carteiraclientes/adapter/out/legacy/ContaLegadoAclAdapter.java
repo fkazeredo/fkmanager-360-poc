@@ -67,8 +67,10 @@ public class ContaLegadoAclAdapter implements ContasClientePort {
             throw new InvalidCoreLegadoResponseException("Item de conta sem numero de conta");
         }
         try {
+            // ContaId canonicaliza no proprio construtor -- nao precisa mais de
+            // HostFormat.stripLeadingZeros aqui.
             return new ContaCorrente(
-                    new ContaId(HostFormat.stripLeadingZeros(item.numCta())),
+                    new ContaId(item.numCta()),
                     // Agencia e identificacao, exibida como o host a representa; em branco e
                     // campo opcional ausente (ADR-0005), nao erro.
                     item.codAge() == null ? "" : item.codAge().trim());

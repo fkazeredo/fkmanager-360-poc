@@ -8,19 +8,27 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 
+/**
+ * Orcamento de timeout documentado em {@link TokenExchangeConfig} (achado I9 do review de #0002).
+ * O pior caso DECLARADO de servico-credito e a soma de tres chamadas sequenciais que ele mesmo
+ * faz -- Token Exchange (5s) + CarteiraClientes, endpoint estreito (5s) + CoreLegado direto (5s)
+ * = 15s -- e este cliente precisa exceder isso com margem: 15s + 3s = 18s. O timeout anterior
+ * (8s) era exatamente a soma dos DOIS ultimos passos, sem contar o primeiro nem a margem --
+ * suficiente para o BFF desistir antes de servico-credito, que ele mesmo acionou, ter chance de
+ * concluir dentro do que promete.
+ */
 @Configuration
 public class CreditoRestClientConfig {
 
-    /**
-     * Read timeout mais folgado que o de CarteiraClientes: servico-credito faz duas chamadas
-     * remotas antes de responder (autorizacao e depois o Core), e o BFF nao pode desistir antes
-     * de a cadeia que ele mesmo iniciou ter chance de terminar.
-     */
     @Bean
-    RestClient creditoRestClient(@Value("${bff-gerente.credito.base-url}") String baseUrl) {
+    RestClient creditoRestClient(
+            @Value("${bff-gerente.credito.base-url}") String baseUrl,
+            @Value("${bff-gerente.credito.connect-timeout:PT2S}") Duration connectTimeout,
+            @Value("${bff-gerente.credito.read-timeout:PT18S}") Duration readTimeout) {
+
         var requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofSeconds(2));
-        requestFactory.setReadTimeout(Duration.ofSeconds(8));
+        requestFactory.setConnectTimeout(connectTimeout);
+        requestFactory.setReadTimeout(readTimeout);
 
         return RestClient.builder()
                 .baseUrl(baseUrl)

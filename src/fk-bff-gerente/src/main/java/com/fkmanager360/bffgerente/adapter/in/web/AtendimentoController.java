@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 
+import java.util.regex.Pattern;
+
 /**
  * A composicao da tela de atendimento (AC30): o modelo de apresentacao e montado <b>aqui</b>, a
  * partir de servico-carteira-clientes (identidade e vinculo) e servico-credito (limite vigente),
@@ -23,9 +25,19 @@ import org.springframework.web.client.RestClient;
  * <p>O {@code clienteId} viaja no caminho porque a verificacao de direito acontece por Cliente e
  * precisa preceder qualquer acesso ao Core (AC23). Ele nao e afirmacao de posse: quem confirma
  * que a conta e daquele Cliente e CarteiraClientes, contra o CoreLegado.
+ *
+ * <p><b>DEFERRED (achado C4 do review de #0002).</b> As duas chamadas remotas em {@link #atendimento}
+ * sao independentes uma da outra e poderiam ser paralelizadas -- reduzindo a latencia da tela ao
+ * maior dos dois tempos, em vez da soma. Isso exige resolver os dois tokens delegados no thread da
+ * requisicao (o resolver depende dos atributos {@link HttpServletRequest}/{@link HttpServletResponse}
+ * da requisicao atual) antes de despachar as chamadas por um executor que propague o contexto de
+ * seguranca -- complexidade real de concorrencia, desproporcional ao ganho numa POC com um unico
+ * par de chamadas nesta rota. Adiado deliberadamente; nao e um descuido.
  */
 @RestController
 public class AtendimentoController {
+
+    private static final Pattern IDENTIFICADOR_HOST = Pattern.compile("[0-9]{1,10}");
 
     private final RestClient carteiraClientesRestClient;
     private final RestClient creditoRestClient;
@@ -47,6 +59,8 @@ public class AtendimentoController {
             HttpServletRequest request,
             HttpServletResponse response) {
 
+        validarIdentificador(clienteId, "clienteId");
+
         // Encaminhamento simples: a tela precisa das contas, e nao ha nada a compor ainda. Se a
         // tela nao precisa de composicao, encaminhar e resposta legitima (ADR-0013).
         return carteiraClientesRestClient.get()
@@ -64,19 +78,35 @@ public class AtendimentoController {
             HttpServletRequest request,
             HttpServletResponse response) {
 
+        validarIdentificador(clienteId, "clienteId");
+        validarIdentificador(contaId, "contaId");
+
         ContextoAtendimentoResponse contexto = carteiraClientesRestClient.get()
                 .uri("/clientes/{clienteId}/contas/{contaId}/contexto-atendimento", clienteId, contaId)
                 .header("Authorization", "Bearer " + tokenCarteira(authentication, request, response))
                 .retrieve()
                 .body(ContextoAtendimentoResponse.class);
 
-        LimiteVigenteResponse limite = creditoRestClient.get()
+        LimiteChequeEspecialVigenteResponse limite = creditoRestClient.get()
                 .uri("/clientes/{clienteId}/contas/{contaId}/limite-cheque-especial-vigente", clienteId, contaId)
                 .header("Authorization", "Bearer " + tokenCredito(authentication, request, response))
                 .retrieve()
-                .body(LimiteVigenteResponse.class);
+                .body(LimiteChequeEspecialVigenteResponse.class);
 
         return AtendimentoResponse.de(contexto, limite);
+    }
+
+    /**
+     * Validacao na propria borda do BFF (achado I1 do review): um {@code clienteId}/{@code contaId}
+     * fora do formato host nunca deveria virar uma chamada remota que so vai falhar la na frente
+     * -- e sem esta validacao, o 400 que CarteiraClientes devolveria escapava do
+     * {@link GlobalExceptionHandler} (que nao trata {@code HttpClientErrorException.BadRequest})
+     * e virava 500 generico.
+     */
+    private static void validarIdentificador(String valor, String nomeDoCampo) {
+        if (valor == null || !IDENTIFICADOR_HOST.matcher(valor).matches()) {
+            throw new IllegalArgumentException(nomeDoCampo + " deve ser numerico, com ate 10 digitos: " + valor);
+        }
     }
 
     private String tokenCarteira(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {

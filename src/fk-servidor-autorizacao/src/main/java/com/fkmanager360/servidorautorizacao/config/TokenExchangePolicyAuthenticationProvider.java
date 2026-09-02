@@ -22,19 +22,29 @@ import java.util.stream.Collectors;
  * A politica do <b>emissor</b> sobre Token Exchange (RFC 8693), que nao e a mesma coisa que a
  * validacao feita pelo destino (ADR-0015). Sem ela, o servidor-autorizacao copiaria para o token
  * emitido qualquer {@code resource}/{@code audience} e qualquer {@code scope} que o client
- * pedisse -- ver {@link TokenClaimsCustomizerConfig}. Duas regras, ambas verificadas <b>antes</b>
- * de qualquer token ser gerado:
+ * pedisse -- ver {@link TokenClaimsCustomizerConfig}. Tres regras, todas verificadas <b>antes</b>
+ * de qualquer token ser gerado (achado I8 do review de #0002 endureceu as duas primeiras):
  *
  * <ol>
- *   <li><b>Target na allow-list.</b> Cada client declara para quem pode trocar
- *       ({@value #ALLOWED_TARGETS_SETTING} na propria {@link RegisteredClient}, que e o lugar
- *       nativo do Spring Authorization Server para configuracao especifica de um client).</li>
- *   <li><b>Sem amplificacao de privilegio.</b> O scope pedido precisa estar contido no scope do
- *       <b>subject token</b>. Uma cadeia de delegacao pode estreitar capability -- e o desenho
- *       correto, e o que servico-credito faz ao pedir so {@code carteira.leitura} --, mas nunca
- *       ganhar capability que o token original nao tinha. Sem esta regra, um servico intermediario
- *       comprometido trocaria um token de leitura por um de escrita, e a cadeia de delegacao
- *       viraria escada de privilegio.</li>
+ *   <li><b>Exatamente um target por troca.</b> Nenhum target, ou mais de um simultaneamente, e
+ *       recusado -- nao so target fora da allow-list. Sem este limite, um client com dois
+ *       destinos permitidos individualmente (como {@code bff-gerente}, autorizado tanto a
+ *       {@code servico-carteira-clientes} quanto a {@code servico-credito}) poderia pedir os dois
+ *       na mesma troca e receber um unico token com {@code aud} multipla -- exatamente o "token
+ *       de usuario multi-audience" que a plataforma declara nao existir (ADR-0015). Cada
+ *       Resource Server so aceita token emitido para ele; um token multi-audience alcancaria mais
+ *       de um deles com a mesma credencial.</li>
+ *   <li><b>Target na allow-list.</b> O unico target da troca precisa estar entre os que o client
+ *       pode alcancar ({@value #ALLOWED_TARGETS_SETTING} na propria {@link RegisteredClient}, o
+ *       lugar nativo do Spring Authorization Server para configuracao especifica de um client).</li>
+ *   <li><b>Scope explicito, e sem amplificacao de privilegio.</b> Toda troca nesta plataforma
+ *       precisa declarar {@code scope} -- omitir o parametro nao e um atalho para "os scopes do
+ *       subject token", e sim uma requisicao recusada. Isso fecha um vetor que dependia do
+ *       comportamento do provider padrao continuar sendo o que e hoje (autorizar um conjunto
+ *       vazio, e nao herdar scope algum): exigir explicitacao remove essa dependencia. Com scope
+ *       presente, ele precisa estar contido no scope do <b>subject token</b> -- uma cadeia de
+ *       delegacao pode estreitar capability (o que servico-credito faz ao pedir so
+ *       {@code carteira.leitura}), mas nunca ganhar capability que o token original nao tinha.</li>
  * </ol>
  *
  * <p>A validacao de que o scope pedido cabe nos scopes <b>registrados do client</b> continua
@@ -68,41 +78,50 @@ class TokenExchangePolicyAuthenticationProvider implements AuthenticationProvide
         OAuth2TokenExchangeAuthenticationToken grant = (OAuth2TokenExchangeAuthenticationToken) authentication;
         RegisteredClient registeredClient = registeredClientDoGrant(grant);
 
-        exigirTargetNaAllowList(grant, registeredClient);
-        exigirScopeContidoNoSubjectToken(grant, registeredClient);
+        String target = exigirExatamenteUmTarget(grant, registeredClient);
+        exigirTargetNaAllowList(target, registeredClient);
+        exigirScopeExplicitoEContidoNoSubjectToken(grant, registeredClient);
 
         return delegate.authenticate(authentication);
     }
 
-    private void exigirTargetNaAllowList(
-            OAuth2TokenExchangeAuthenticationToken grant, RegisteredClient registeredClient) {
+    private String exigirExatamenteUmTarget(OAuth2TokenExchangeAuthenticationToken grant, RegisteredClient registeredClient) {
+        Set<String> targets = new LinkedHashSet<>();
+        targets.addAll(grant.getResources());
+        targets.addAll(grant.getAudiences());
 
-        Set<String> targetsSolicitados = new LinkedHashSet<>();
-        targetsSolicitados.addAll(grant.getResources());
-        targetsSolicitados.addAll(grant.getAudiences());
-
-        if (targetsSolicitados.isEmpty()) {
-            return;
+        if (targets.size() != 1) {
+            throw new OAuth2AuthenticationException(new OAuth2Error(
+                    INVALID_TARGET,
+                    "Cada troca nesta plataforma precisa ter exatamente um destino (resource ou "
+                            + "audience); o client %s pediu %d"
+                            .formatted(registeredClient.getClientId(), targets.size()),
+                    null));
         }
+        return targets.iterator().next();
+    }
 
+    private void exigirTargetNaAllowList(String target, RegisteredClient registeredClient) {
         Set<String> targetsPermitidos = registeredClient.getClientSettings().getSetting(ALLOWED_TARGETS_SETTING);
-        if (targetsPermitidos == null || !targetsPermitidos.containsAll(targetsSolicitados)) {
+        if (targetsPermitidos == null || !targetsPermitidos.contains(target)) {
             throw new OAuth2AuthenticationException(new OAuth2Error(
                     INVALID_TARGET,
                     "O client %s nao esta autorizado a solicitar token para %s"
-                            .formatted(registeredClient.getClientId(), targetsSolicitados),
+                            .formatted(registeredClient.getClientId(), target),
                     null));
         }
     }
 
-    private void exigirScopeContidoNoSubjectToken(
+    private void exigirScopeExplicitoEContidoNoSubjectToken(
             OAuth2TokenExchangeAuthenticationToken grant, RegisteredClient registeredClient) {
 
         Set<String> scopesSolicitados = grant.getScopes();
         if (scopesSolicitados == null || scopesSolicitados.isEmpty()) {
-            // Sem scope pedido, o provider padrao emite os scopes do proprio subject token -- que
-            // por definicao nao amplia nada.
-            return;
+            throw new OAuth2AuthenticationException(new OAuth2Error(
+                    INVALID_SCOPE,
+                    "Toda troca nesta plataforma precisa declarar scope explicitamente; o client "
+                            + "%s nao pediu nenhum".formatted(registeredClient.getClientId()),
+                    null));
         }
 
         Set<String> scopesDoSubjectToken = scopesDoSubjectToken(grant);

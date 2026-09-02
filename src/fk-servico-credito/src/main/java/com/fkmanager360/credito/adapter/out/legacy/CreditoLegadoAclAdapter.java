@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClient;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
 
@@ -44,7 +45,12 @@ public class CreditoLegadoAclAdapter implements DadosCreditoCorePort {
     private static final String COD_RET_CONTA_NAO_ENCONTRADA = "121";
 
     private static final String SIT_CTA_REGULAR = "01";
-    private static final DateTimeFormatter DATA_HOST = DateTimeFormatter.ofPattern("uuuuMMdd");
+    // STRICT, e nao o SMART default: sem isto, "20250229" (29 de fevereiro num ano nao bissexto
+    // -- a assinatura classica de um registro host corrompido) resolveria silenciosamente para
+    // 2025-02-28 em vez de lancar. STRICT com o padrao "uuuu" (ano-da-era, nao "yyyy") e a
+    // combinacao que faz o campo de ano ser interpretado literalmente.
+    private static final DateTimeFormatter DATA_HOST =
+            DateTimeFormatter.ofPattern("uuuuMMdd").withResolverStyle(ResolverStyle.STRICT);
 
     private final RestClient restClient;
     private final Clock clock;

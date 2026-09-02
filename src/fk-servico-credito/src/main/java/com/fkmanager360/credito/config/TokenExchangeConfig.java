@@ -10,7 +10,14 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.TokenExchangeOAuth2AuthorizedClientProvider;
 import org.springframework.security.oauth2.client.endpoint.RestClientTokenExchangeTokenResponseClient;
+import org.springframework.security.oauth2.client.http.OAuth2ErrorResponseErrorHandler;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.core.http.converter.OAuth2AccessTokenResponseHttpMessageConverter;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.FormHttpMessageConverter;
+import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
 
 /**
  * A segunda perna da delegacao encadeada (ADR-0015): quando servico-credito continua a operacao
@@ -51,6 +58,10 @@ public class TokenExchangeConfig {
 
         RestClientTokenExchangeTokenResponseClient tokenExchangeResponseClient =
                 new RestClientTokenExchangeTokenResponseClient();
+        // Timeout explicito (achado I9 do review de #0002): o RestClient default do Spring
+        // Security nao tem timeout algum. Chamada-folha (emitir token e assinatura local, sem
+        // downstream propria) -- mesmo orcamento de uma chamada ao CoreLegado.
+        tokenExchangeResponseClient.setRestClient(tokenExchangeRestClient());
         // "resource" (RFC 8693) exige URI absoluta; "audience" aceita nome logico -- o mesmo
         // parametro que servidor-autorizacao espera para emitir a aud correta.
         tokenExchangeResponseClient.setParametersCustomizer(
@@ -65,5 +76,33 @@ public class TokenExchangeConfig {
                 clientRegistrationRepository, authorizedClientService);
         manager.setAuthorizedClientProvider(providerChain);
         return manager;
+    }
+
+    /**
+     * Reproduz deliberadamente o RestClient default que
+     * {@code AbstractRestClientOAuth2AccessTokenResponseClient} construiria sozinho -- os
+     * conversores {@link FormHttpMessageConverter} (corpo de saida, form-urlencoded) e
+     * {@link OAuth2AccessTokenResponseHttpMessageConverter} (corpo de entrada, o formato de
+     * resposta do endpoint de token) mais {@link OAuth2ErrorResponseErrorHandler}. Um
+     * {@code RestClient.builder().build()} generico NAO sabe desserializar
+     * {@code OAuth2AccessTokenResponse} -- so tem Jackson generico --, e {@code setRestClient}
+     * substitui o cliente inteiro, nao so o {@code ClientHttpRequestFactory}. Sem esta
+     * reproducao, a troca falharia com "accessToken cannot be null" mesmo contra um endpoint de
+     * token saudavel.
+     */
+    private static RestClient tokenExchangeRestClient() {
+        var requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(2));
+        requestFactory.setReadTimeout(Duration.ofSeconds(3));
+
+        return RestClient.builder()
+                .requestFactory(requestFactory)
+                .messageConverters(converters -> {
+                    converters.clear();
+                    converters.add(new FormHttpMessageConverter());
+                    converters.add(new OAuth2AccessTokenResponseHttpMessageConverter());
+                })
+                .defaultStatusHandler(new OAuth2ErrorResponseErrorHandler())
+                .build();
     }
 }

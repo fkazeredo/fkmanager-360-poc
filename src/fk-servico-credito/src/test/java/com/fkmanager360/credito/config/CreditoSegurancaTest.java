@@ -20,7 +20,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.text.ParseException;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
@@ -63,7 +62,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CreditoSegurancaTest {
 
     private static final String AUD = JwtDecoderTestConfig.EXPECTED_AUDIENCE;
-    private static final String PATH_CONTEXTO = "/clientes/1/contas/10001/contexto-atendimento";
+    private static final String PATH_DIREITO = "/clientes/1/contas/10001/direito-de-atendimento";
     private static final String PATH_CORE = "/legado/contas/consulta-credito";
     private static final String PATH_TOKEN = "/oauth2/token";
     private static final String ENDPOINT = "/clientes/1/contas/10001/limite-cheque-especial-vigente";
@@ -108,11 +107,10 @@ class CreditoSegurancaTest {
                  "token_type":"Bearer","expires_in":300}
                 """.formatted(tokenDelegado()))));
 
-        // CarteiraClientes: concede o atendimento por padrao.
-        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO)).willReturn(json("""
-                {"clienteId":"1","nome":"ANA BEATRIZ SOUZA","cpfMascarado":"***.222.333-**",
-                 "conta":{"contaId":"10001","agencia":"0001"}}
-                """)));
+        // CarteiraClientes: concede o atendimento por padrao -- 204 sem corpo, a operacao
+        // estreita que este servico consome (I4 do review de #0002).
+        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_DIREITO))
+                .willReturn(aResponse().withStatus(204)));
 
         // CoreLegado.
         dependenciasExternas.stubFor(post(urlEqualTo(PATH_CORE)).willReturn(json("""
@@ -206,7 +204,7 @@ class CreditoSegurancaTest {
 
     @Test
     void semDireitoDeAtendimento_e403_eNenhumaChamadaAoCoreLegado() throws Exception {
-        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO))
+        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_DIREITO))
                 .willReturn(aResponse().withStatus(403)));
 
         mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.sem.direito")))
@@ -217,7 +215,7 @@ class CreditoSegurancaTest {
 
     @Test
     void contaQueCarteiraClientesNaoReconhece_e404_eNenhumaChamadaAoCoreLegado() throws Exception {
-        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO))
+        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_DIREITO))
                 .willReturn(aResponse().withStatus(404)));
 
         mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.conta.404")))
@@ -230,7 +228,7 @@ class CreditoSegurancaTest {
     void carteiraClientesIndisponivel_e503_eNenhumaChamadaAoCoreLegado() throws Exception {
         // Falha de comunicacao nao e resposta de negocio: nao se conclui nada sobre o direito de
         // atendimento, e o Core continua intocado.
-        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO))
+        dependenciasExternas.stubFor(WireMock.get(urlEqualTo(PATH_DIREITO))
                 .willReturn(aResponse().withStatus(503)));
 
         mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.carteira.503")))
@@ -239,20 +237,80 @@ class CreditoSegurancaTest {
         dependenciasExternas.verify(0, postRequestedFor(urlEqualTo(PATH_CORE)));
     }
 
-    // --- AC21: Token Exchange encadeado, reduzindo capability --------------------------------
+    /**
+     * O que o I4 do review resolveu estruturalmente: a operacao estreita nunca consulta dados
+     * mestres do Cliente dentro de CarteiraClientes, entao uma indisponibilidade dessa consulta
+     * cadastral -- que aqui nem existe mais como possibilidade, porque o endpoint consumido nao a
+     * invoca -- nao pode mais bloquear a leitura do limite. A prova do lado de CarteiraClientes
+     * esta em {@code AtendimentoSegurancaTest.direitoDeAtendimento_nuncaConsultaDadosMestres};
+     * aqui a prova e que o caminho feliz de Credito depende apenas de {@code PATH_DIREITO}
+     * responder, nunca de dados cadastrais.
+     */
+    @Test
+    void comDireitoConcedido_naoDependeDeNenhumDadoCadastralDoCliente() throws Exception {
+        // O stub de PATH_DIREITO no @BeforeEach ja e 204 sem corpo -- nenhum nome, nenhum CPF.
+        // Se este teste passa, a leitura do limite nao depende de dado cadastral algum.
+        mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.sem.cadastro")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.limiteChequeEspecialVigente").value(500000));
+    }
+
+    // --- Recusa real do Token Exchange pelo servidor-autorizacao -----------------------------
+
+    /**
+     * O que acontece quando a SEGUNDA troca (Credito -> CarteiraClientes) e recusada pelo
+     * servidor-autorizacao de verdade -- nao um 403/503 de CarteiraClientes, e sim o proprio
+     * endpoint de token recusando a emissao. Sem o tratamento em
+     * {@code CarteiraClientesAdapter.confirmarDireitoDeAtendimento}, esta excecao nao e
+     * {@code RestClientException} e escapa sem handler ate um 500 generico.
+     */
+    @Test
+    void tokenExchangeRecusadoPeloServidorDeAutorizacao_vira503_naoErroGenerico() throws Exception {
+        dependenciasExternas.stubFor(post(urlEqualTo(PATH_TOKEN)).willReturn(aResponse()
+                .withStatus(400)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"error":"invalid_scope","error_description":"scope amplificado"}
+                        """)));
+
+        mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.token.recusado")))
+                .andExpect(status().isServiceUnavailable());
+
+        dependenciasExternas.verify(0, postRequestedFor(urlEqualTo(PATH_CORE)));
+    }
+
+    // --- Taxonomia 502/503/504 do CoreLegado na borda -----------------------------------------
 
     @Test
-    void aoContinuarAOperacaoContraCarteiraClientes_apresentaTokenComAAudienceCorreta() throws Exception {
-        mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.aud.correta")))
-                .andExpect(status().isOk());
+    void coreLegadoIndisponivel_e503() throws Exception {
+        dependenciasExternas.stubFor(post(urlEqualTo(PATH_CORE)).willReturn(aResponse().withStatus(503)));
 
-        LoggedRequest chamadaACarteira = umaRequisicao(getRequestedFor(urlEqualTo(PATH_CONTEXTO)));
-        String bearer = chamadaACarteira.getHeader("Authorization").replace("Bearer ", "");
-
-        assertThat(audienceDe(bearer))
-                .as("o token apresentado a CarteiraClientes precisa ter sido emitido para ela (AC21)")
-                .containsExactly("servico-carteira-clientes");
+        mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.core.503")))
+                .andExpect(status().isServiceUnavailable());
     }
+
+    @Test
+    void coreLegadoRespostaIlegivel_e502() throws Exception {
+        dependenciasExternas.stubFor(post(urlEqualTo(PATH_CORE)).willReturn(aResponse()
+                .withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"codRet\":\"000\",")));
+
+        mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.core.502")))
+                .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void coreLegadoTimeout_e504() throws Exception {
+        dependenciasExternas.stubFor(post(urlEqualTo(PATH_CORE)).willReturn(aResponse()
+                .withStatus(200).withFixedDelay(6000)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"codRet\":\"121\"}")));
+
+        mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDeGerente("gerente.core.504")))
+                .andExpect(status().isGatewayTimeout());
+    }
+
+    // --- AC21: Token Exchange encadeado, reduzindo capability --------------------------------
 
     @Test
     void aTrocaEncadeadaPedeAAudienceDoDestinoEReduzOScope() throws Exception {
@@ -294,7 +352,7 @@ class CreditoSegurancaTest {
         mockMvc.perform(get(ENDPOINT).header("Authorization", "Bearer " + tokenDoUsuario))
                 .andExpect(status().isOk());
 
-        String bearerApresentado = umaRequisicao(getRequestedFor(urlEqualTo(PATH_CONTEXTO)))
+        String bearerApresentado = umaRequisicao(getRequestedFor(urlEqualTo(PATH_DIREITO)))
                 .getHeader("Authorization").replace("Bearer ", "");
 
         // Reutilizar o token destinado a Credito o transformaria em credencial de plataforma --
@@ -316,14 +374,6 @@ class CreditoSegurancaTest {
                 .collect(Collectors.toMap(
                         par -> URLDecoder.decode(par[0], StandardCharsets.UTF_8),
                         par -> par.length > 1 ? URLDecoder.decode(par[1], StandardCharsets.UTF_8) : ""));
-    }
-
-    private static List<String> audienceDe(String jwt) {
-        try {
-            return SignedJWT.parse(jwt).getJWTClaimsSet().getAudience();
-        } catch (ParseException e) {
-            throw new IllegalStateException("token apresentado nao e um JWT legivel", e);
-        }
     }
 
     private static String tokenDelegado() {

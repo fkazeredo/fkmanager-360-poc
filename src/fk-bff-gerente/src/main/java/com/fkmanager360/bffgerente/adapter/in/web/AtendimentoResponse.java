@@ -19,7 +19,22 @@ record AtendimentoResponse(ClienteResumo cliente, ContaResumo conta, long limite
     record ContaResumo(String contaId, String agencia) {
     }
 
-    static AtendimentoResponse de(ContextoAtendimentoResponse contexto, LimiteVigenteResponse limite) {
+    /**
+     * Valida a presenca de cada campo obrigatorio antes de compor -- nenhum dos dois corpos e
+     * confiado cegamente. Um {@code 2xx} com corpo vazio, truncado ou com {@code limite} ausente
+     * vira {@link DependenciaRespostaInvalidaException} (502 na borda), nunca um
+     * {@code NullPointerException} (500) nem um limite fabricado como zero.
+     */
+    static AtendimentoResponse de(ContextoAtendimentoResponse contexto, LimiteChequeEspecialVigenteResponse limite) {
+        if (contexto == null || contexto.clienteId() == null || contexto.conta() == null) {
+            throw new DependenciaRespostaInvalidaException(
+                    "servico-carteira-clientes devolveu contexto de atendimento incompleto");
+        }
+        if (limite == null || limite.limiteChequeEspecialVigente() == null || limite.consultadoEm() == null) {
+            throw new DependenciaRespostaInvalidaException(
+                    "servico-credito devolveu limite vigente incompleto");
+        }
+
         return new AtendimentoResponse(
                 new ClienteResumo(contexto.clienteId(), contexto.nome(), contexto.cpfMascarado()),
                 new ContaResumo(contexto.conta().contaId(), contexto.conta().agencia()),

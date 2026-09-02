@@ -3,6 +3,7 @@ package com.fkmanager360.carteiraclientes;
 import com.fkmanager360.carteiraclientes.application.port.out.ContasClientePort;
 import com.fkmanager360.carteiraclientes.application.port.out.DadosMestresClientePort;
 import com.fkmanager360.carteiraclientes.application.port.out.VinculosCarteiraPort;
+import com.fkmanager360.carteiraclientes.application.usecase.ConfirmarDireitoDeAtendimento;
 import com.fkmanager360.carteiraclientes.application.usecase.ConsultarContextoAtendimento;
 import com.fkmanager360.carteiraclientes.application.usecase.ListarClientesDaCarteira;
 import com.fkmanager360.carteiraclientes.application.usecase.ListarContasDoCliente;
@@ -31,8 +32,13 @@ public class ServicoCarteiraClientesApplication {
     }
 
     @Bean
+    ConfirmarDireitoDeAtendimento confirmarDireitoDeAtendimento(VinculosCarteiraPort vinculos, ContasClientePort contas) {
+        return new ConfirmarDireitoDeAtendimento(vinculos, contas);
+    }
+
+    @Bean
     ConsultarContextoAtendimento consultarContextoAtendimento(
-            VinculosCarteiraPort vinculos, ContasClientePort contas, DadosMestresClientePort dadosMestres) {
-        return new ConsultarContextoAtendimento(vinculos, contas, dadosMestres);
+            ConfirmarDireitoDeAtendimento confirmarDireitoDeAtendimento, DadosMestresClientePort dadosMestres) {
+        return new ConsultarContextoAtendimento(confirmarDireitoDeAtendimento, dadosMestres);
     }
 }

@@ -40,6 +40,7 @@
       <strong class="valor">{{ limiteFormatado() }}</strong>
       <span class="procedencia">
         Confirmado pelo CoreLegado em {{ dados.consultadoEm | date: 'dd/MM/yyyy HH:mm' }}
+        para a conta {{ dados.conta.contaId }} de {{ dados.cliente.nome }}
       </span>
     </div>
   }
