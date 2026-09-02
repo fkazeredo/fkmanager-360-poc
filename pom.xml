@@ -53,10 +53,22 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!--
+                    Sem heranca de spring-boot-starter-parent, o goal repackage nao se liga
+                    sozinho a fase package: a execucao precisa ser declarada aqui, uma vez,
+                    para que cada modulo so precise referenciar o plugin (ADR-0011).
+                -->
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
