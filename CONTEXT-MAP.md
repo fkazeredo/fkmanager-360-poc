@@ -35,13 +35,20 @@ de atendê-lo. É a **autoridade sobre a associação atual** GerenteRelacioname
 Cliente, e verifica esse direito ao ser acessado (ADR-0007). Os dados mestres do Cliente pertencem
 ao CoreLegado; a associação pertence ao fk-manager-360.
 
+**Não é fachada financeira.** O LimiteChequeEspecial e sua consulta no CoreLegado pertencem a
+`Credito`, pela ACL daquele contexto (ADR-0004). Uma tela que precise mostrar cliente, conta e
+limite ao mesmo tempo é composta pelo `bff-gerente` a partir dos dois contextos, e essa composição
+é modelo de apresentação — não agregado, não contexto novo (ADR-0013).
+
 ### Credito — **Core Domain**
 
 O domínio central da POC. Responde pelo processo de aumento do LimiteChequeEspecial de ponta a
 ponta: solicitação, PoliticaCredito, MotorDecisaoCredito, ParecerCredito, DecisaoCredito,
-AlcadaAprovacao e EfetivacaoLimite. Guarda os invariantes que justificam o projeto — maker-checker
-(ADR-0007), alçada em dois eixos (ADR-0008), fotografia imutável do ContextoDecisaoCredito
-(ADR-0006) e conclusão idempotente da efetivação (ADR-0009).
+AlcadaAprovacao e EfetivacaoLimite. É o **dono semântico do limite de cheque especial** e consulta
+no CoreLegado, pela sua própria ACL, as informações de crédito de que precisa (ADR-0004). Guarda os
+invariantes que justificam o projeto — maker-checker (ADR-0007), alçada em dois eixos (ADR-0008),
+fotografia imutável do ContextoDecisaoCredito (ADR-0006) e conclusão idempotente da efetivação
+(ADR-0009).
 
 ### Risco — **Supporting Domain**
 

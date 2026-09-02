@@ -80,7 +80,13 @@ acessar uma capacidade; o domínio responde se aquela operação específica é 
 ## CarteiraClientes
 
 Contexto responsável por responder quem é o cliente, quais contas ele possui, e qual gerente tem
-direito de atendê-lo.
+direito de atendê-lo: cadastro, vínculo e relacionamento — os dados de que a experiência do gerente
+precisa para chegar até a conta certa.
+
+**Não é dono do LimiteChequeEspecial nem de nenhum outro dado financeiro da conta.** O LimiteVigente
+é consultado por Credito, pela ACL própria daquele contexto (ADR-0004). Quando uma tela precisar
+exibir cliente, conta e limite ao mesmo tempo, quem compõe é o `bff-gerente`, e o resultado é modelo
+de apresentação — não agregado, não contexto (ADR-0013).
 
 **CarteiraClientes**:
 Conjunto de Clientes sob responsabilidade de um GerenteRelacionamento. A associação pertence ao
@@ -91,14 +97,11 @@ _Evitar_: Base de clientes, Book, Portfólio
 Conta de um Cliente. Neste contexto é essencialmente a conta que pertence a determinado Cliente e
 que determinado gerente tem direito de atender.
 
-**PosicaoFinanceira**:
-Retrato consolidado da situação da ContaCorrente em um instante: saldo, LimiteVigente e exposição.
-_Evitar_: Saldo, Extrato
-
 ## Credito
 
 Core domain. Responsável pelo processo de aumento de limite: solicitação, política, decisão,
-alçada e efetivação.
+alçada e efetivação. É o dono semântico do LimiteChequeEspecial e consulta no CoreLegado, pela sua
+própria ACL, as informações de crédito de que precisa (ADR-0004).
 
 **LimiteChequeEspecial**:
 Valor máximo que o Cliente pode utilizar além do saldo disponível na ContaCorrente. Produto de
@@ -134,9 +137,9 @@ FALHA_EFETIVACAO (ADR-0010).
 _Evitar_: APROVADA como status — aprovação é resultado de decisão, não estado de workflow
 
 **ContextoDecisaoCredito**:
-Fotografia imutável dos fatos considerados no momento da submissão, com a versão da política
-aplicada. Guarda indicadores derivados e sua procedência, nunca os dados brutos que os originaram
-(ADR-0006).
+Fotografia imutável dos fatos considerados no momento da submissão, junto com a
+`versaoPoliticaCredito` aplicada. Guarda indicadores derivados e sua procedência, nunca os dados
+brutos que os originaram (ADR-0006).
 _Evitar_: Snapshot, Dados do cliente, Payload da proposta
 
 **PoliticaCredito**:

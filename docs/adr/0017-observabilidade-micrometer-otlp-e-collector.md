@@ -42,9 +42,9 @@ sanitizada.
 
 Micrometer expõe observabilidade operacional do negócio — `decisoes_credito_total{resultado,origem}`,
 `efetivacoes_limite_total{resultado}`, tempo de permanência em `AGUARDANDO_EFETIVACAO`, tempo de
-`AvaliacaoRisco`. Labels têm cardinalidade controlada: `resultado`, `origem` e `versaoPolitica` são
-aceitáveis; `clienteId`, `cpf`, `contaId`, `solicitacaoId`, `protocoloCore` e `correlationId` não
-entram em série temporal — pertencem a logs e traces.
+`AvaliacaoRisco`. Labels têm cardinalidade controlada: `resultado`, `origem` e
+`versaoPoliticaCredito` são aceitáveis; `clienteId`, `cpf`, `contaId`, `solicitacaoId`,
+`protocoloCore` e `correlationId` não entram em série temporal — pertencem a logs e traces.
 
 Prometheus **não é system of record de negócio**. "Quantas decisões foram aprovadas em agosto" e
 "quantas solicitações usaram a versão 17 da política" são perguntas auditáveis, e a resposta deriva

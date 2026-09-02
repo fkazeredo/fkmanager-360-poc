@@ -16,8 +16,8 @@ agregado apenas por auditoria inflaria o agregado sem melhorar a rastreabilidade
 
 ## Consequências
 
-A pergunta que o snapshot precisa responder no futuro é: *com quais informações e sob qual versão
-das regras esta decisão foi tomada?*
+A pergunta que o ContextoDecisaoCredito precisa responder no futuro é: *com quais informações e sob
+qual versão das regras esta decisão foi tomada?*
 
 Se qualquer informação obrigatória não puder ser obtida durante a montagem, a
 `SolicitacaoAumentoLimite` **não é persistida** e a requisição falha explicitamente. Não existe

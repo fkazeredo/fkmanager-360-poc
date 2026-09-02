@@ -26,11 +26,11 @@ próprios recursos.
 
 ## Consequências
 
-Acesso ao cliente atual e acesso ao histórico de uma proposta **não são a mesma regra**. Se o
-cliente mudar de carteira depois que o gerente originou uma solicitação, ainda é preciso decidir
-se ele continua enxergando aquele histórico — e essa regra não deve ser resolvida implicitamente
-por claims. Por isso a solicitação registra o `originadorId` e o contexto organizacional vigente
-no momento da origem.
+Acesso ao cliente atual e acesso ao histórico de uma SolicitacaoAumentoLimite **não são a mesma
+regra**. Se o cliente mudar de carteira depois que o gerente originou uma solicitação, ainda é
+preciso decidir se ele continua enxergando aquele histórico — e essa regra não deve ser resolvida
+implicitamente por claims. Por isso a solicitação registra o `originadorId` e o contexto
+organizacional vigente no momento da origem.
 
-Analistas e supervisores acessam propostas segundo suas filas, permissões e alçadas, não segundo a
-carteira original do gerente.
+Analistas e supervisores acessam solicitações segundo suas filas, permissões e alçadas, não segundo
+a carteira original do gerente.
