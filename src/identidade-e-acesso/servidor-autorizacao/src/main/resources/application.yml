@@ -7,16 +7,16 @@ spring:
         issuer: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}
 
 servidor-autorizacao:
-  chave-assinatura:
-    privada: ${AUTH_SERVER_CHAVE_ASSINATURA_PRIVADA:}
-    publica: ${AUTH_SERVER_CHAVE_ASSINATURA_PUBLICA:}
+  signing-key:
+    private: ${AUTH_SERVER_SIGNING_KEY_PRIVATE:}
+    public: ${AUTH_SERVER_SIGNING_KEY_PUBLIC:}
   bff-client:
     client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
     client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
     redirect-uri: ${AUTH_SERVER_BFF_REDIRECT_URI:https://localhost/bff/login/oauth2/code/servidor-autorizacao}
     post-logout-redirect-uri: ${AUTH_SERVER_BFF_POST_LOGOUT_REDIRECT_URI:https://localhost/}
   # login:senha:papel;login:senha:papel -- usuarios de demonstracao, sem identidade_db (ADR-0014).
-  usuarios-demo: ${AUTH_SERVER_USUARIOS_DEMO:gerente.a:troque-senha-a:GERENTE_RELACIONAMENTO;gerente.b:troque-senha-b:GERENTE_RELACIONAMENTO}
+  demo-users: ${AUTH_SERVER_DEMO_USERS:gerente.a:troque-senha-a:GERENTE_RELACIONAMENTO;gerente.b:troque-senha-b:GERENTE_RELACIONAMENTO}
 
 server:
   port: 9000

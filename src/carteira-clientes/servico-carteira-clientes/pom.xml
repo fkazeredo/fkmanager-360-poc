@@ -99,7 +99,7 @@
             <scope>test</scope>
         </dependency>
         <!-- S3: bootstrap do schema real contra o container de teste, reusando os scripts
-             canonicos de carteira-clientes-migracoes (nao uma copia). A aplicacao em si nunca
+             canonicos de carteira-clientes-migrations (nao uma copia). A aplicacao em si nunca
              tem Flyway no classpath principal: migracoes nao rodam em runtime (ADR-0014). -->
         <dependency>
             <groupId>org.flywaydb</groupId>
@@ -137,7 +137,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
             <!--
-                S3 prova comportamento contra as migrations REAIS de carteira-clientes-migracoes,
+                S3 prova comportamento contra as migrations REAIS de carteira-clientes-migrations,
                 nao uma copia: este recurso de teste adicional expõe
                 classpath:db/migration a partir do modulo canonico.
             -->
@@ -155,7 +155,7 @@
                         <configuration>
                             <resources>
                                 <resource>
-                                    <directory>${project.basedir}/../migracoes/src/main/resources</directory>
+                                    <directory>${project.basedir}/../migrations/src/main/resources</directory>
                                 </resource>
                             </resources>
                         </configuration>

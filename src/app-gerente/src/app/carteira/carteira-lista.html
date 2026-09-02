@@ -1,15 +1,15 @@
 <section class="carteira">
   <h2>Minha carteira de clientes</h2>
 
-  @if (carregando()) {
+  @if (loading()) {
     <p>Carregando...</p>
-  } @else if (erro()) {
+  } @else if (error()) {
     <p class="erro">Nao foi possivel carregar sua carteira agora. Tente novamente.</p>
-  } @else if (itens().length === 0) {
+  } @else if (items().length === 0) {
     <p>Nenhum cliente na sua carteira.</p>
   } @else {
     <ul class="lista-clientes">
-      @for (cliente of itens(); track cliente.clienteId) {
+      @for (cliente of items(); track cliente.clienteId) {
         <li>
           <span class="nome">{{ cliente.nome }}</span>
           <span class="cpf">{{ cliente.cpfMascarado }}</span>
@@ -18,9 +18,9 @@
     </ul>
 
     <div class="paginacao">
-      <button type="button" (click)="paginaAnterior()" [disabled]="pagina() === 0">Anterior</button>
-      <span>Pagina {{ pagina() + 1 }} de {{ totalPaginas() }} &middot; {{ totalElementos() }} clientes</span>
-      <button type="button" (click)="proximaPagina()" [disabled]="pagina() + 1 >= totalPaginas()">Proxima</button>
+      <button type="button" (click)="previousPage()" [disabled]="page() === 0">Anterior</button>
+      <span>Pagina {{ page() + 1 }} de {{ totalPages() }} &middot; {{ totalElements() }} clientes</span>
+      <button type="button" (click)="nextPage()" [disabled]="page() + 1 >= totalPages()">Proxima</button>
     </div>
   }
 </section>

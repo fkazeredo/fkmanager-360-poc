@@ -24,7 +24,7 @@
     -->
     <modules>
         <module>src/identidade-e-acesso/servidor-autorizacao</module>
-        <module>src/carteira-clientes/migracoes</module>
+        <module>src/carteira-clientes/migrations</module>
         <module>src/carteira-clientes/servico-carteira-clientes</module>
         <module>src/bff-gerente</module>
         <module>src/simulador-core-legado</module>

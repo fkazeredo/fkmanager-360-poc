@@ -1,8 +1,8 @@
 package com.fkmanager360.carteiraclientes;
 
-import com.fkmanager360.carteiraclientes.aplicacao.ListarClientesDaCarteira;
-import com.fkmanager360.carteiraclientes.aplicacao.portas.PortaDadosMestresCliente;
-import com.fkmanager360.carteiraclientes.aplicacao.portas.PortaVinculosCarteira;
+import com.fkmanager360.carteiraclientes.application.usecase.ListarClientesDaCarteira;
+import com.fkmanager360.carteiraclientes.application.port.out.DadosMestresClientePort;
+import com.fkmanager360.carteiraclientes.application.port.out.VinculosCarteiraPort;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -15,7 +15,7 @@ public class ServicoCarteiraClientesApplication {
     }
 
     @Bean
-    ListarClientesDaCarteira listarClientesDaCarteira(PortaVinculosCarteira vinculos, PortaDadosMestresCliente dadosMestres) {
+    ListarClientesDaCarteira listarClientesDaCarteira(VinculosCarteiraPort vinculos, DadosMestresClientePort dadosMestres) {
         return new ListarClientesDaCarteira(vinculos, dadosMestres);
     }
 }

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { lerCredenciaisDemo } from './credenciais-demo';
+import { readDemoCredentials } from './demo-credentials';
 
 /**
  * S7: harness Playwright contra a stack real do Compose (F7), sem bypass de seguranca. Estas
@@ -7,13 +7,13 @@ import { lerCredenciaisDemo } from './credenciais-demo';
  * fecha em #0005, entao nenhuma etapa alem de login/carteira/logout e exercitada aqui.
  */
 
-const credenciais = lerCredenciaisDemo();
+const credentials = readDemoCredentials();
 
-async function logarComo(page: Page, login: string, senha: string): Promise<void> {
+async function logInAs(page: Page, login: string, password: string): Promise<void> {
   await page.goto('/');
   await page.getByRole('button', { name: 'Entrar' }).click();
   await page.locator('#username').fill(login);
-  await page.locator('#password').fill(senha);
+  await page.locator('#password').fill(password);
   await page.locator('button[type=submit]').click();
   await expect(page.getByText(login, { exact: true })).toBeVisible();
 }
@@ -38,7 +38,7 @@ test.describe('Jornada 1 -- primeiros passos', () => {
         });
     });
 
-    await logarComo(page, credenciais['gerente.a'].login, credenciais['gerente.a'].senha);
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
 
     expect(respostasComToken).toEqual([]);
 
@@ -62,7 +62,7 @@ test.describe('Jornada 1 -- primeiros passos', () => {
   test('AC22 (parcial): carteira paginada mostra somente os clientes do gerente autenticado, e a paginacao navega', async ({
     page,
   }) => {
-    await logarComo(page, credenciais['gerente.a'].login, credenciais['gerente.a'].senha);
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
 
     const itens = page.locator('.lista-clientes li');
     await expect(itens.first()).toBeVisible();
@@ -96,8 +96,8 @@ test.describe('Jornada 1 -- primeiros passos', () => {
       const paginaA = await contextoA.newPage();
       const paginaB = await contextoB.newPage();
 
-      await logarComo(paginaA, credenciais['gerente.a'].login, credenciais['gerente.a'].senha);
-      await logarComo(paginaB, credenciais['gerente.b'].login, credenciais['gerente.b'].senha);
+      await logInAs(paginaA, credentials['gerente.a'].login, credentials['gerente.a'].senha);
+      await logInAs(paginaB, credentials['gerente.b'].login, credentials['gerente.b'].senha);
 
       await expect(paginaA.locator('.lista-clientes li').first()).toBeVisible();
       await expect(paginaB.locator('.lista-clientes li').first()).toBeVisible();
@@ -117,7 +117,7 @@ test.describe('Jornada 1 -- primeiros passos', () => {
   test('AC20: uma escrita sem o token CSRF esperado e recusada, e o logout real invalida a sessao', async ({
     page,
   }) => {
-    await logarComo(page, credenciais['gerente.a'].login, credenciais['gerente.a'].senha);
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
 
     // Requisicao de escrita sem X-XSRF-TOKEN: page.request compartilha os cookies do browser
     // (incluindo SESSION), mas nao replica o interceptor do Angular que anexa o header -- exatamente

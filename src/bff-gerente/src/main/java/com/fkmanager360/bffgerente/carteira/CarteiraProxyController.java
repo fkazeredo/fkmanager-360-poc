@@ -1,6 +1,6 @@
 package com.fkmanager360.bffgerente.carteira;
 
-import com.fkmanager360.bffgerente.seguranca.TokenExchangeConfig;
+import com.fkmanager360.bffgerente.security.TokenExchangeConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
@@ -42,25 +42,28 @@ public class CarteiraProxyController {
             Authentication authentication,
             HttpServletRequest request,
             HttpServletResponse response,
-            @RequestParam(defaultValue = "0") int pagina,
-            @RequestParam(required = false) Integer tamanho) {
+            // name= explicito: o parametro de query publico ("pagina"/"tamanho") e contrato HTTP
+            // ja exercitado por Angular/Playwright/curl -- so o identificador Java interno segue
+            // a convencao tecnica em ingles.
+            @RequestParam(name = "pagina", defaultValue = "0") int page,
+            @RequestParam(name = "tamanho", required = false) Integer size) {
 
-        String tokenDelegado = obterTokenDelegado(authentication, request, response);
+        String delegatedToken = resolveDelegatedToken(authentication, request, response);
 
         return carteiraClientesRestClient.get()
                 .uri(uriBuilder -> {
-                    uriBuilder.path("/carteira/clientes").queryParam("pagina", pagina);
-                    if (tamanho != null) {
-                        uriBuilder.queryParam("tamanho", tamanho);
+                    uriBuilder.path("/carteira/clientes").queryParam("pagina", page);
+                    if (size != null) {
+                        uriBuilder.queryParam("tamanho", size);
                     }
                     return uriBuilder.build();
                 })
-                .header("Authorization", "Bearer " + tokenDelegado)
+                .header("Authorization", "Bearer " + delegatedToken)
                 .retrieve()
                 .body(String.class);
     }
 
-    private String obterTokenDelegado(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
+    private String resolveDelegatedToken(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
         OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest
                 .withClientRegistrationId(TokenExchangeConfig.REGISTRATION_CARTEIRA_CLIENTES)
                 .principal(authentication)
@@ -76,7 +79,7 @@ public class CarteiraProxyController {
     }
 
     @RestControllerAdvice(assignableTypes = CarteiraProxyController.class)
-    static class TratamentoDeErros {
+    static class GlobalExceptionHandler {
 
         @ExceptionHandler(HttpClientErrorException.Forbidden.class)
         ProblemDetail semDireitoDeAtendimento(HttpClientErrorException.Forbidden e) {

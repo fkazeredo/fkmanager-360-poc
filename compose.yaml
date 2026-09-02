@@ -13,8 +13,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
       POSTGRES_DB: postgres
-      CARTEIRA_DB_MIGRATOR_SENHA: ${CARTEIRA_DB_MIGRATOR_SENHA}
-      CARTEIRA_DB_APP_SENHA: ${CARTEIRA_DB_APP_SENHA}
+      CARTEIRA_DB_MIGRATOR_PASSWORD: ${CARTEIRA_DB_MIGRATOR_PASSWORD}
+      CARTEIRA_DB_APP_PASSWORD: ${CARTEIRA_DB_APP_PASSWORD}
     volumes:
       # postgres 18+ organiza o PGDATA por versao maior sob /var/lib/postgresql (pg_ctlcluster-
       # style); montar o volume direto em .../data e a convencao antiga e o entrypoint recusa
@@ -29,13 +29,13 @@ services:
 
   redis:
     image: redis:8-alpine
-    command: ["redis-server", "--requirepass", "${REDIS_SENHA}"]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     environment:
       # command: e resolvido pelo Compose a partir do .env do host no parse -- o healthcheck roda
-      # dentro do container e precisa da variavel no ambiente dele para o $$REDIS_SENHA expandir.
-      REDIS_SENHA: ${REDIS_SENHA}
+      # dentro do container e precisa da variavel no ambiente dele para o $$REDIS_PASSWORD expandir.
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_SENHA\" --no-auth-warning ping | grep -q PONG"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -56,30 +56,30 @@ services:
       dockerfile: src/identidade-e-acesso/servidor-autorizacao/Dockerfile
     environment:
       # DNS interno: o claim "iss" dos tokens nao precisa ser o endereco que o navegador ve
-      # (AUTH_SERVER_URL_PUBLICA, usado por bff-gerente) -- so precisa ser estavel e alcancavel
+      # (AUTH_SERVER_PUBLIC_URL, usado por bff-gerente) -- so precisa ser estavel e alcancavel
       # por todo Resource Server que valida esses tokens.
       AUTH_SERVER_ISSUER_URI: http://servidor-autorizacao:9000
-      AUTH_SERVER_CHAVE_ASSINATURA_PRIVADA: ${AUTH_SERVER_CHAVE_ASSINATURA_PRIVADA}
-      AUTH_SERVER_CHAVE_ASSINATURA_PUBLICA: ${AUTH_SERVER_CHAVE_ASSINATURA_PUBLICA}
+      AUTH_SERVER_SIGNING_KEY_PRIVATE: ${AUTH_SERVER_SIGNING_KEY_PRIVATE}
+      AUTH_SERVER_SIGNING_KEY_PUBLIC: ${AUTH_SERVER_SIGNING_KEY_PUBLIC}
       AUTH_SERVER_BFF_CLIENT_ID: ${AUTH_SERVER_BFF_CLIENT_ID}
       AUTH_SERVER_BFF_CLIENT_SECRET: ${AUTH_SERVER_BFF_CLIENT_SECRET}
       AUTH_SERVER_BFF_REDIRECT_URI: ${AUTH_SERVER_BFF_REDIRECT_URI}
       AUTH_SERVER_BFF_POST_LOGOUT_REDIRECT_URI: ${AUTH_SERVER_BFF_POST_LOGOUT_REDIRECT_URI}
-      AUTH_SERVER_USUARIOS_DEMO: ${AUTH_SERVER_USUARIOS_DEMO}
+      AUTH_SERVER_DEMO_USERS: ${AUTH_SERVER_DEMO_USERS}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/.well-known/openid-configuration"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  migracoes-carteira-clientes:
+  migrations-carteira-clientes:
     build:
       context: .
-      dockerfile: src/carteira-clientes/migracoes/Dockerfile
+      dockerfile: src/carteira-clientes/migrations/Dockerfile
     environment:
-      CARTEIRA_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${CARTEIRA_DB_NOME}
-      CARTEIRA_DB_MIGRATOR_USUARIO: ${CARTEIRA_DB_MIGRATOR_USUARIO}
-      CARTEIRA_DB_MIGRATOR_SENHA: ${CARTEIRA_DB_MIGRATOR_SENHA}
+      CARTEIRA_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${CARTEIRA_DB_NAME}
+      CARTEIRA_DB_MIGRATOR_USER: ${CARTEIRA_DB_MIGRATOR_USER}
+      CARTEIRA_DB_MIGRATOR_PASSWORD: ${CARTEIRA_DB_MIGRATOR_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,15 +90,15 @@ services:
       context: .
       dockerfile: src/carteira-clientes/servico-carteira-clientes/Dockerfile
     environment:
-      CARTEIRA_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${CARTEIRA_DB_NOME}
-      CARTEIRA_DB_APP_USUARIO: ${CARTEIRA_DB_APP_USUARIO}
-      CARTEIRA_DB_APP_SENHA: ${CARTEIRA_DB_APP_SENHA}
+      CARTEIRA_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${CARTEIRA_DB_NAME}
+      CARTEIRA_DB_APP_USER: ${CARTEIRA_DB_APP_USER}
+      CARTEIRA_DB_APP_PASSWORD: ${CARTEIRA_DB_APP_PASSWORD}
       CORE_LEGADO_BASE_URL: http://simulador-core-legado:8090
       AUTH_SERVER_ISSUER_URI: http://servidor-autorizacao:9000
     depends_on:
       postgres:
         condition: service_healthy
-      migracoes-carteira-clientes:
+      migrations-carteira-clientes:
         condition: service_completed_successfully
       simulador-core-legado:
         condition: service_healthy
@@ -117,9 +117,9 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_SENHA: ${REDIS_SENHA}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       AUTH_SERVER_ISSUER_URI: http://servidor-autorizacao:9000
-      AUTH_SERVER_URL_PUBLICA: ${AUTH_SERVER_URL_PUBLICA}
+      AUTH_SERVER_PUBLIC_URL: ${AUTH_SERVER_PUBLIC_URL}
       AUTH_SERVER_BFF_CLIENT_ID: ${AUTH_SERVER_BFF_CLIENT_ID}
       AUTH_SERVER_BFF_CLIENT_SECRET: ${AUTH_SERVER_BFF_CLIENT_SECRET}
       CARTEIRA_CLIENTES_BASE_URL: http://servico-carteira-clientes:8081

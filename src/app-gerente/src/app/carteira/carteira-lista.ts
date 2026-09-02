@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { CarteiraClientesService } from '../core/carteira-clientes';
-import { ClienteResumo } from '../core/modelos';
+import { ClienteResumo } from '../core/models';
 
 @Component({
   selector: 'app-carteira-lista',
@@ -10,44 +10,44 @@ import { ClienteResumo } from '../core/modelos';
 export class CarteiraLista {
   private readonly carteiraClientes = inject(CarteiraClientesService);
 
-  readonly itens = signal<ClienteResumo[]>([]);
-  readonly pagina = signal(0);
-  readonly totalPaginas = signal(0);
-  readonly totalElementos = signal(0);
-  readonly carregando = signal(true);
-  readonly erro = signal(false);
+  readonly items = signal<ClienteResumo[]>([]);
+  readonly page = signal(0);
+  readonly totalPages = signal(0);
+  readonly totalElements = signal(0);
+  readonly loading = signal(true);
+  readonly error = signal(false);
 
   constructor() {
-    this.buscar(0);
+    this.fetch(0);
   }
 
-  buscar(pagina: number): void {
-    this.carregando.set(true);
-    this.erro.set(false);
-    this.carteiraClientes.buscarPagina(pagina).subscribe({
+  fetch(page: number): void {
+    this.loading.set(true);
+    this.error.set(false);
+    this.carteiraClientes.fetchPage(page).subscribe({
       next: (resultado) => {
-        this.itens.set(resultado.itens);
-        this.pagina.set(resultado.pagina);
-        this.totalPaginas.set(resultado.totalPaginas);
-        this.totalElementos.set(resultado.totalElementos);
-        this.carregando.set(false);
+        this.items.set(resultado.itens);
+        this.page.set(resultado.pagina);
+        this.totalPages.set(resultado.totalPaginas);
+        this.totalElements.set(resultado.totalElementos);
+        this.loading.set(false);
       },
       error: () => {
-        this.carregando.set(false);
-        this.erro.set(true);
+        this.loading.set(false);
+        this.error.set(true);
       },
     });
   }
 
-  paginaAnterior(): void {
-    if (this.pagina() > 0) {
-      this.buscar(this.pagina() - 1);
+  previousPage(): void {
+    if (this.page() > 0) {
+      this.fetch(this.page() - 1);
     }
   }
 
-  proximaPagina(): void {
-    if (this.pagina() + 1 < this.totalPaginas()) {
-      this.buscar(this.pagina() + 1);
+  nextPage(): void {
+    if (this.page() + 1 < this.totalPages()) {
+      this.fetch(this.page() + 1);
     }
   }
 }

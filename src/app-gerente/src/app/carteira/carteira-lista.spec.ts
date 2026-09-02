@@ -48,7 +48,7 @@ describe('CarteiraLista', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    fixture.componentInstance.proximaPagina();
+    fixture.componentInstance.nextPage();
 
     httpMock.expectOne((req) => req.params.get('pagina') === '1')
         .flush({ itens: [], pagina: 1, tamanho: 5, totalElementos: 7, totalPaginas: 2 });

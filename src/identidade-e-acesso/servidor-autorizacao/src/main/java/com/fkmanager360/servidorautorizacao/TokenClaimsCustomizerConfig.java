@@ -34,36 +34,36 @@ import java.util.Set;
 public class TokenClaimsCustomizerConfig {
 
     @Bean
-    JwtDecoder proprioJwtDecoder(JWKSource<SecurityContext> jwkSource) {
+    JwtDecoder ownJwtDecoder(JWKSource<SecurityContext> jwkSource) {
         return NimbusJwtDecoder.withJwkSource(jwkSource).build();
     }
 
     @Bean
-    OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer(JwtDecoder proprioJwtDecoder) {
+    OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer(JwtDecoder ownJwtDecoder) {
         return context -> {
             if (!OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
                 return;
             }
 
             if (AuthorizationGrantType.TOKEN_EXCHANGE.equals(context.getAuthorizationGrantType())) {
-                aplicarClaimsDeTokenExchange(context, proprioJwtDecoder);
+                applyTokenExchangeClaims(context, ownJwtDecoder);
             } else {
-                aplicarPapeisDoPrincipalAutenticado(context);
+                applyAuthenticatedPrincipalRoles(context);
             }
         };
     }
 
-    private void aplicarClaimsDeTokenExchange(JwtEncodingContext context, JwtDecoder proprioJwtDecoder) {
+    private void applyTokenExchangeClaims(JwtEncodingContext context, JwtDecoder ownJwtDecoder) {
         OAuth2TokenExchangeAuthenticationToken grant = context.getAuthorizationGrant();
 
-        Set<String> audiencias = new LinkedHashSet<>();
-        audiencias.addAll(grant.getResources());
-        audiencias.addAll(grant.getAudiences());
-        if (!audiencias.isEmpty()) {
-            context.getClaims().audience(new ArrayList<>(audiencias));
+        Set<String> audiences = new LinkedHashSet<>();
+        audiences.addAll(grant.getResources());
+        audiences.addAll(grant.getAudiences());
+        if (!audiences.isEmpty()) {
+            context.getClaims().audience(new ArrayList<>(audiences));
         }
 
-        Jwt subjectJwt = proprioJwtDecoder.decode(grant.getSubjectToken());
+        Jwt subjectJwt = ownJwtDecoder.decode(grant.getSubjectToken());
         context.getClaims().subject(subjectJwt.getSubject());
 
         List<String> papeis = subjectJwt.getClaimAsStringList("papeis");
@@ -72,7 +72,7 @@ public class TokenClaimsCustomizerConfig {
         }
     }
 
-    private void aplicarPapeisDoPrincipalAutenticado(JwtEncodingContext context) {
+    private void applyAuthenticatedPrincipalRoles(JwtEncodingContext context) {
         Authentication principal = context.getPrincipal();
         if (principal == null || principal.getAuthorities() == null) {
             return;
@@ -80,8 +80,8 @@ public class TokenClaimsCustomizerConfig {
 
         List<String> papeis = principal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .filter(autoridade -> autoridade.startsWith("ROLE_"))
-                .map(autoridade -> autoridade.substring("ROLE_".length()))
+                .filter(authority -> authority.startsWith("ROLE_"))
+                .map(authority -> authority.substring("ROLE_".length()))
                 .toList();
 
         if (!papeis.isEmpty()) {

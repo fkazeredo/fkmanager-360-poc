@@ -1,5 +1,5 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { SessaoService } from './core/sessao';
+import { SessionService } from './core/session';
 import { CarteiraLista } from './carteira/carteira-lista';
 
 @Component({
@@ -9,9 +9,9 @@ import { CarteiraLista } from './carteira/carteira-lista';
   styleUrl: './app.css',
 })
 export class App implements OnInit {
-  protected readonly sessao = inject(SessaoService);
+  protected readonly session = inject(SessionService);
 
   ngOnInit(): void {
-    this.sessao.carregar();
+    this.session.load();
   }
 }

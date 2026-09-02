@@ -3,8 +3,8 @@ spring:
     name: servico-carteira-clientes
   datasource:
     url: ${CARTEIRA_DB_JDBC_URL}
-    username: ${CARTEIRA_DB_APP_USUARIO}
-    password: ${CARTEIRA_DB_APP_SENHA}
+    username: ${CARTEIRA_DB_APP_USER}
+    password: ${CARTEIRA_DB_APP_PASSWORD}
   security:
     oauth2:
       resourceserver:
@@ -17,8 +17,8 @@ carteira-clientes:
     connect-timeout: PT2S
     read-timeout: PT3S
   # aud esperado neste servico (validado pelo AudienceValidator, alem do issuer padrao do Spring).
-  seguranca:
-    audience-esperada: servico-carteira-clientes
+  security:
+    expected-audience: servico-carteira-clientes
 
 server:
   port: 8081

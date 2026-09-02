@@ -1,8 +1,8 @@
 package com.fkmanager360.carteiraclientes.smoke;
 
-import com.fkmanager360.carteiraclientes.adapters.saida.acl.ClienteLegadoAclAdapter;
-import com.fkmanager360.carteiraclientes.dominio.ClienteId;
-import com.fkmanager360.carteiraclientes.dominio.DadosMestresCliente;
+import com.fkmanager360.carteiraclientes.adapter.out.legacy.ClienteLegadoAclAdapter;
+import com.fkmanager360.carteiraclientes.domain.ClienteId;
+import com.fkmanager360.carteiraclientes.domain.DadosMestresCliente;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;

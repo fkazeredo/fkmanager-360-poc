@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * apenas se comportar corretamente.
  */
 @WebMvcTest(ClienteLegadoController.class)
-@Import(BaseClientesLegado.class)
+@Import(ClientesLegadoStore.class)
 class ClienteLegadoControllerTest {
 
     @Autowired
@@ -78,7 +78,7 @@ class ClienteLegadoControllerTest {
 
     @Test
     void lote_acimaDaQuantidadeMaximaDeOcorrencias_e400() throws Exception {
-        String codigos = java.util.stream.IntStream.rangeClosed(1, ConsultaClientesLegadoRequisicao.MAX_OCORRENCIAS + 1)
+        String codigos = java.util.stream.IntStream.rangeClosed(1, ClientesLegadoQueryRequest.MAX_OCORRENCIAS + 1)
                 .mapToObj(i -> "\"%010d\"".formatted(i))
                 .collect(java.util.stream.Collectors.joining(","));
 

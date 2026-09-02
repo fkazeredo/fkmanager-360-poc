@@ -4,12 +4,12 @@ spring:
   session:
     store-type: redis
     redis:
-      namespace: bff-gerente:sessao
+      namespace: bff-gerente:session
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_SENHA:}
+      password: ${REDIS_PASSWORD:}
   security:
     oauth2:
       client:
@@ -38,7 +38,7 @@ spring:
             # endereco interno (AUTH_SERVER_ISSUER_URI) -- e o mesmo valor que
             # servico-carteira-clientes usa para validar, e nao precisa ser o que aparece na barra
             # de enderecos do navegador.
-            authorization-uri: ${AUTH_SERVER_URL_PUBLICA:http://localhost:9000}/oauth2/authorize
+            authorization-uri: ${AUTH_SERVER_PUBLIC_URL:http://localhost:9000}/oauth2/authorize
             token-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/oauth2/token
             jwk-set-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/oauth2/jwks
             user-info-uri: ${AUTH_SERVER_ISSUER_URI:http://localhost:9000}/userinfo
@@ -47,7 +47,7 @@ spring:
 bff-gerente:
   # Mesma origem publica que o browser ja usa para /oauth2/authorize (ver provider acima) --
   # e tambem onde app-gerente/nginx serve a SPA de verdade, entao e o alvo certo pos-login.
-  app-url-publica: ${AUTH_SERVER_URL_PUBLICA:http://localhost:4200}/
+  app-public-url: ${AUTH_SERVER_PUBLIC_URL:http://localhost:4200}/
   carteira-clientes:
     base-url: ${CARTEIRA_CLIENTES_BASE_URL:http://localhost:8081}
     # nome logico, nao URI absoluta (RFC 8693: "resource" exige URI, "audience" nao).

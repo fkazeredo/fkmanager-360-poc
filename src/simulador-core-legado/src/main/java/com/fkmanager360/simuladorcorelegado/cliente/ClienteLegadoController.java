@@ -16,19 +16,19 @@ import java.util.List;
 @RestController
 public class ClienteLegadoController {
 
-    private final BaseClientesLegado base;
+    private final ClientesLegadoStore store;
 
-    public ClienteLegadoController(BaseClientesLegado base) {
-        this.base = base;
+    public ClienteLegadoController(ClientesLegadoStore store) {
+        this.store = store;
     }
 
     @PostMapping(path = "/legado/clientes/consulta-lote")
-    public ConsultaClientesLegadoResposta consultarLote(@Valid @RequestBody ConsultaClientesLegadoRequisicao requisicao) {
-        List<ClienteLegadoItemResposta> itens = requisicao.codCli().stream()
-                .map(codCli -> base.buscar(codCli)
-                        .map(ClienteLegadoItemResposta::sucesso)
-                        .orElseGet(() -> ClienteLegadoItemResposta.naoEncontrado(codCli)))
+    public ClientesLegadoQueryResponse consultarLote(@Valid @RequestBody ClientesLegadoQueryRequest requisicao) {
+        List<ClienteLegadoItemResponse> itens = requisicao.codCli().stream()
+                .map(codCli -> store.find(codCli)
+                        .map(ClienteLegadoItemResponse::sucesso)
+                        .orElseGet(() -> ClienteLegadoItemResponse.naoEncontrado(codCli)))
                 .toList();
-        return ConsultaClientesLegadoResposta.processado(itens);
+        return ClientesLegadoQueryResponse.processado(itens);
     }
 }

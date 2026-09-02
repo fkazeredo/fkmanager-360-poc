@@ -62,9 +62,9 @@ if ((Test-Path $envDestino) -and -not $Forcar) {
 
     $substituicoes = @{
         'POSTGRES_SUPERUSER_PASSWORD=troque-esta-senha-do-superuser'        = "POSTGRES_SUPERUSER_PASSWORD=$(New-SenhaAleatoria)"
-        'CARTEIRA_DB_MIGRATOR_SENHA=troque-esta-senha-migrator'             = "CARTEIRA_DB_MIGRATOR_SENHA=$(New-SenhaAleatoria)"
-        'CARTEIRA_DB_APP_SENHA=troque-esta-senha-app'                       = "CARTEIRA_DB_APP_SENHA=$(New-SenhaAleatoria)"
-        'REDIS_SENHA=troque-esta-senha-redis'                               = "REDIS_SENHA=$(New-SenhaAleatoria)"
+        'CARTEIRA_DB_MIGRATOR_PASSWORD=troque-esta-senha-migrator'          = "CARTEIRA_DB_MIGRATOR_PASSWORD=$(New-SenhaAleatoria)"
+        'CARTEIRA_DB_APP_PASSWORD=troque-esta-senha-app'                    = "CARTEIRA_DB_APP_PASSWORD=$(New-SenhaAleatoria)"
+        'REDIS_PASSWORD=troque-esta-senha-redis'                            = "REDIS_PASSWORD=$(New-SenhaAleatoria)"
         'AUTH_SERVER_BFF_CLIENT_SECRET=troque-este-client-secret'           = "AUTH_SERVER_BFF_CLIENT_SECRET=$(New-SenhaAleatoria)"
         'gerente.a:troque-senha-a:GERENTE_RELACIONAMENTO;gerente.b:troque-senha-b:GERENTE_RELACIONAMENTO' = "gerente.a:$(New-SenhaAleatoria -Tamanho 12):GERENTE_RELACIONAMENTO;gerente.b:$(New-SenhaAleatoria -Tamanho 12):GERENTE_RELACIONAMENTO"
     }
@@ -81,8 +81,8 @@ if ((Test-Path $envDestino) -and -not $Forcar) {
         $privadaUmaLinha = (Get-Content -Path $tmpPriv -Raw) -replace "`r`n", "`n" -replace "`n", '\n'
         $publicaUmaLinha = (Get-Content -Path $tmpPub -Raw) -replace "`r`n", "`n" -replace "`n", '\n'
 
-        $conteudo = $conteudo.Replace('AUTH_SERVER_CHAVE_ASSINATURA_PRIVADA=', "AUTH_SERVER_CHAVE_ASSINATURA_PRIVADA=$privadaUmaLinha")
-        $conteudo = $conteudo.Replace('AUTH_SERVER_CHAVE_ASSINATURA_PUBLICA=', "AUTH_SERVER_CHAVE_ASSINATURA_PUBLICA=$publicaUmaLinha")
+        $conteudo = $conteudo.Replace('AUTH_SERVER_SIGNING_KEY_PRIVATE=', "AUTH_SERVER_SIGNING_KEY_PRIVATE=$privadaUmaLinha")
+        $conteudo = $conteudo.Replace('AUTH_SERVER_SIGNING_KEY_PUBLIC=', "AUTH_SERVER_SIGNING_KEY_PUBLIC=$publicaUmaLinha")
     } finally {
         Remove-Item $tmpPriv, $tmpPub -Force -ErrorAction SilentlyContinue
     }

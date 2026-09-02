@@ -77,6 +77,50 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 language the project doesn't use (reconsider) or there's a real gap (note it for
 `/domain-modeling`).
 
+## Naming convention: domain language vs. technical language
+
+> Domain language uses PT-BR and ASCII identifiers according to the ubiquitous language. Technical
+> software-engineering terminology uses English. Mixed names may combine a PT-BR domain concept
+> with an English technical qualifier.
+
+This governs how the glossary's vocabulary becomes code, not just prose. Getting it wrong in one
+ticket (#0001 did, and was refactored) teaches the wrong pattern to every ticket that copies it.
+
+**DOMAIN — stays PT-BR.** Any identifier naming a concept from `CONTEXT.md` or a materialised
+`src/<context>/CONTEXT.md`: `Cliente`, `CarteiraClientes`, `GerenteRelacionamento`, `ContaCorrente`,
+`SolicitacaoAumentoLimite`, `DecisaoCredito`, `LimiteChequeEspecial`. Methods whose name is directly
+domain behaviour, read as ubiquitous language, may also stay PT-BR (`executar` on a use case
+representing the action itself; `indisponivel()` as a `DadosMestresCliente` factory).
+
+**TECHNICAL — English.** Packages that describe architectural structure, not domain, follow
+hexagonal (ports & adapters) in English: `domain`, `application` (`application/port/{in,out}`,
+`application/usecase`), `adapter` (`adapter/in/web`, `adapter/out/persistence`, `adapter/out/legacy`),
+`config`. Class/interface qualifiers: `Controller`, `Repository`, `Adapter`, `Client`, `Config`,
+`Filter`, `Validator`, `Converter`, `Port`, `Request`, `Response`, `Exception`, `Handler`. Generic
+infrastructure concepts that aren't domain vocabulary even when they sound close — session
+(`Sessao`→`Session`), pagination (`Paginacao`→`Pagination`, `PaginaResultado`→`PageResult`),
+security config (`SegurancaConfig`→`SecurityConfig`) — follow the same rule: they're not defined as
+ubiquitous-language terms in any `CONTEXT.md`, so they're technical, not domain.
+
+**MIXED — domain noun + English technical qualifier.** `ClienteRepositoryAdapter`,
+`ListarClientesDaCarteira` (a use case name can stay fully domain-flavoured, per the project's own
+established convention), `CoreLegadoUnavailableException` (`CoreLegado` is a protected actor name;
+`Unavailable`+`Exception` are technical). Don't translate word-by-word — decide per identifier which
+part is the domain noun (keep) and which part is the technical shape (translate).
+
+**Protected names — never rename for this.** Bounded context and deployable names already fixed by
+`CONTEXT-MAP.md`/ADR-0013 (`carteira-clientes`, `identidade-e-acesso`, `servico-carteira-clientes`,
+`servidor-autorizacao`, `simulador-core-legado`, `bff-gerente`, `app-gerente`) are not technical
+naming and don't move. Neither do external contracts: JSON field/query-param names already
+exercised by another service, Angular, or a test (`pagina`, `tamanho`, `totalElementos`,
+`cpfMascarado`, `codCli`/`nomCli`/... — the simulator's own fictional host-centric fields, ADR-0005)
+stay exactly as published. Rename the internal identifier around a contract boundary, never the
+contract itself, "por estética".
+
+Comments, exception/log message strings, and test method names stay PT-BR prose per ADR-0001 —
+this rule is about identifiers (packages, classes, interfaces, methods, significant variables), not
+about prose.
+
 ## Flag ADR conflicts
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
