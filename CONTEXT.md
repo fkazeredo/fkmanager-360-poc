@@ -111,7 +111,7 @@ _Evitar_: Cheque especial, Crédito rotativo, Limite
 **LimiteChequeEspecialVigente**:
 O LimiteChequeEspecial atualmente reconhecido pelo CoreLegado. É o único valor que pode ser
 apresentado como "o limite do Cliente" (ADR-0002).
-_Evitar_: Limite aprovado, Limite atual
+_Evitar_: LimiteVigente, Limite aprovado, Limite atual
 
 **LimiteSolicitado**:
 Valor pretendido em uma SolicitacaoAumentoLimite. Não se torna LimiteChequeEspecialVigente antes da
