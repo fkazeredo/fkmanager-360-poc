@@ -125,3 +125,32 @@ Não implementado (explicitamente fora de escopo, fecha em #0002+): `servico-cre
 limite, Token Exchange encadeado `Credito` → `CarteiraClientes`, seleção de `Cliente` e suas
 `ContaCorrente`s, composição de tela cliente+conta+limite, jornada Playwright nova (os quatro testes
 deste ticket são os primeiros passos da jornada 1, que só fecha em #0005).
+
+**2026-09-02** — `/code-review` sobre `develop...feature/0001-autenticacao-e-carteira-do-gerente`
+(revisão do delta integral, não só do commit de reorganização): 0 BLOCKER, 5 IMPORTANT, 5 COSMETIC.
+Todos os IMPORTANT corrigidos e os COSMETIC tratados (commit `fix: address ticket 0001 code review
+findings`):
+
+- resíduos documentais do extinto módulo standalone de migrations (`CONTEXT.md` do contexto,
+  javadoc, spec) removidos;
+- `CLAUDE.md` e a spec corrigidos para `docs/contextos/<contexto>/CONTEXT.md`;
+- contratos OpenAPI versionados criados em `contratos/openapi/` para as três interfaces REST do
+  ticket (ADR-0019), com validação sintática mínima (`scripts/validar-openapi.mjs`);
+- `servidor-autorizacao` ganhou allow-list de audience no Token Exchange (ADR-0015): antes,
+  qualquer `resource`/`audience` pedido pelo client era copiado direto para o `aud` emitido; agora
+  `bff-gerente` só pode trocar por `servico-carteira-clientes`, e qualquer outro alvo recebe
+  `invalid_target` sem emitir token;
+- AC20 ("sessão sobrevive ao restart") passou a ser provado por um teste Playwright que reinicia de
+  verdade o container `bff-gerente` (`docker compose restart`, Redis vivo). Esse teste expôs um bug
+  real: `bff-gerente` nunca teve `OAuth2AuthorizedClientRepository` ligado à sessão HTTP — caía no
+  default do Spring Security (`InMemoryOAuth2AuthorizedClientService`, em memória do processo), e o
+  token trocado com `servico-carteira-clientes` não sobrevivia a um restart, apesar do próprio
+  código alegar o contrário. Corrigido com `HttpSessionOAuth2AuthorizedClientRepository` explícito;
+  corrigida também, no mesmo raio, a chave `spring.session.redis.namespace` (nome errado, ignorada
+  em silêncio) para `spring.session.data.redis.namespace`.
+- hardening de headers no `nginx.conf` (HSTS, X-Content-Type-Options, X-Frame-Options).
+
+AC20 sobe de parcial para satisfeito integralmente. Revalidado de ponta a ponta: `./mvnw clean
+verify` no reactor inteiro (59 testes Java), suite Angular, os três contratos OpenAPI, rebuild das 5
+imagens Docker, cold start completo, 5/5 Playwright (incluindo o novo teste de restart) contra a
+stack real reconstruída. Re-review final: 0 BLOCKER, 0 IMPORTANT.
