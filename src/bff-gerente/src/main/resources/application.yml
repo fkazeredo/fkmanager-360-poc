@@ -45,6 +45,9 @@ spring:
             user-name-attribute: sub
 
 bff-gerente:
+  # Mesma origem publica que o browser ja usa para /oauth2/authorize (ver provider acima) --
+  # e tambem onde app-gerente/nginx serve a SPA de verdade, entao e o alvo certo pos-login.
+  app-url-publica: ${AUTH_SERVER_URL_PUBLICA:http://localhost:4200}/
   carteira-clientes:
     base-url: ${CARTEIRA_CLIENTES_BASE_URL:http://localhost:8081}
     # nome logico, nao URI absoluta (RFC 8693: "resource" exige URI, "audience" nao).

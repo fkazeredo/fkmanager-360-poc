@@ -122,15 +122,23 @@ class BffSegurancaTest {
     }
 
     @Test
-    void requisicaoQualquer_emiteCookieXsrfToken() throws Exception {
-        // Regressao: CsrfFilter resolve o token via Supplier adiado -- sem algo que force essa
+    void requisicaoQualquer_emiteCookieXsrfTokenComPathRaiz() throws Exception {
+        // Regressao 1: CsrfFilter resolve o token via Supplier adiado -- sem algo que force essa
         // resolucao, o cookie XSRF-TOKEN nunca e escrito numa API pura (sem view server-side
         // lendo "_csrf"), e a SPA fica sem meio legitimo de obter o token para POST /logout.
+        //
+        // Regressao 2: sem Path="/" explicito, CookieCsrfTokenRepository herda o context-path do
+        // servlet (/bff) como Path do cookie. document.cookie de uma pagina servida em "/"
+        // (app-gerente) nunca enxerga um cookie escopado a "/bff" -- o browser ainda o ENVIA de
+        // volta em requisicoes para /bff/**, entao o sintoma so aparece do lado do JS, nunca em
+        // ferramentas que nao respeitam Path na leitura (curl, Postman, MockMvc sem esta
+        // asercao).
         MvcResult resultado = mockMvc.perform(get("/actuator/health")).andReturn();
 
         String setCookie = resultado.getResponse().getHeader(HttpHeaders.SET_COOKIE);
         assertThat(setCookie).isNotNull();
-        assertThat(setCookie).contains("XSRF-TOKEN=");
+        assertThat(setCookie).contains("XSRF-TOKEN=").contains("Path=/");
+        assertThat(setCookie).doesNotContain("Path=/bff");
     }
 
     @Test
