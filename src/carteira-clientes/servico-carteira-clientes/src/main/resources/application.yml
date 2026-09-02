@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: servico-carteira-clientes
+  datasource:
+    url: ${CARTEIRA_DB_JDBC_URL}
+    username: ${CARTEIRA_DB_APP_USUARIO}
+    password: ${CARTEIRA_DB_APP_SENHA}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_SERVER_ISSUER_URI:}
+
+carteira-clientes:
+  core-legado:
+    base-url: ${CORE_LEGADO_BASE_URL}
+    connect-timeout: PT2S
+    read-timeout: PT3S
+  # aud esperado neste servico (validado pelo AudienceValidator, alem do issuer padrao do Spring).
+  seguranca:
+    audience-esperada: servico-carteira-clientes
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    readinessstate:
+      enabled: true

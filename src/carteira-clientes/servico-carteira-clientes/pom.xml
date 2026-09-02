@@ -27,6 +27,24 @@
         <wiremock.version>3.13.2</wiremock.version>
     </properties>
 
+    <!--
+        wiremock-jetty12 pede jetty-ee10-bom 12.0.30 internamente, mas spring-boot-dependencies ja
+        importa jetty-bom/jetty-ee11-bom 12.1.12. Sem isto, jetty-server (12.1.12, ganho por estar
+        mais perto na arvore) e jetty-ee10-servlet (12.0.30, sem outro gerenciador) ficam
+        binariamente incompativeis. Alinha jetty-ee10 na mesma versao.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.eclipse.jetty.ee10</groupId>
+                <artifactId>jetty-ee10-bom</artifactId>
+                <version>12.1.12</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -93,10 +111,12 @@
             <artifactId>flyway-database-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- S4: mesmo HTTP client e adapter de producao contra um mock HTTP server real. -->
+        <!-- S4: mesmo HTTP client e adapter de producao contra um mock HTTP server real.
+             wiremock-jetty12 (nao wiremock puro) traz a implementacao de HttpServerFactory que a
+             versao 3.13 passou a exigir como extensao separada. -->
         <dependency>
             <groupId>org.wiremock</groupId>
-            <artifactId>wiremock</artifactId>
+            <artifactId>wiremock-jetty12</artifactId>
             <version>${wiremock.version}</version>
             <scope>test</scope>
         </dependency>
