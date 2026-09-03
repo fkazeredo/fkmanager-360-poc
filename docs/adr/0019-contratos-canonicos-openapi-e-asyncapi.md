@@ -35,5 +35,6 @@ para adotá-lo (ADR-0012).
 Publicar um evento novo implica escrever o contrato dele: não existe evento inter-contexto sem
 schema versionado.
 
-O diretório de contratos vira o inventário do que precisaria acompanhar cada serviço numa eventual
-extração para repositório próprio.
+O OpenAPI de cada serviço HTTP mora dentro do próprio serviço (`src/<serviço>/openapi.yaml`), e
+não num diretório central de contratos: assim o arquivo já viaja junto numa eventual extração para
+repositório próprio (ADR-0011), sem inventário separado para lembrar de levar.

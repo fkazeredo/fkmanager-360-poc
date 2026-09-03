@@ -1,18 +1,21 @@
 #!/usr/bin/env node
-// Validacao minima dos contratos OpenAPI versionados em contratos/openapi/ (ADR-0019): cada
-// arquivo precisa ser YAML sintaticamente valido, ter a forma basica de um documento OpenAPI 3.x
-// (openapi/info/paths) e nao ter nenhuma referencia interna ($ref: "#/...") quebrada -- o erro
-// mais comum e barato de pegar num contrato editado a mao. Nao substitui teste de conformidade
-// contra a implementacao real; e a base sintatica sobre a qual esse teste, quando existir,
-// se apoiaria.
+// Validacao minima dos contratos OpenAPI versionados em src/<servico>/openapi.yaml (ADR-0019):
+// cada arquivo precisa ser YAML sintaticamente valido, ter a forma basica de um documento
+// OpenAPI 3.x (openapi/info/paths) e nao ter nenhuma referencia interna ($ref: "#/...") quebrada
+// -- o erro mais comum e barato de pegar num contrato editado a mao. Nao substitui teste de
+// conformidade contra a implementacao real; e a base sintatica sobre a qual esse teste, quando
+// existir, se apoiaria.
+//
+// O contrato mora dentro do proprio servico (nao num diretorio central) para que uma extracao
+// para repositorio proprio (ADR-0011) leve o contrato junto, sem inventario separado.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import yaml from "js-yaml";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const contratosDir = path.resolve(__dirname, "..", "contratos", "openapi");
+const srcDir = path.resolve(__dirname, "..", "src");
 
 function resolverPonteiro(documento, ponteiro) {
     if (!ponteiro.startsWith("#/")) {
@@ -47,8 +50,7 @@ function coletarRefsQuebradas(documento, no, caminho, encontradas) {
     }
 }
 
-function validarArquivo(nomeArquivo) {
-    const caminhoCompleto = path.join(contratosDir, nomeArquivo);
+function validarArquivo(caminhoCompleto) {
     const erros = [];
 
     let documento;
@@ -78,21 +80,25 @@ function validarArquivo(nomeArquivo) {
     return erros;
 }
 
-const arquivos = readdirSync(contratosDir).filter((nome) => nome.endsWith(".yaml") || nome.endsWith(".yml"));
+const arquivos = readdirSync(srcDir, { withFileTypes: true })
+    .filter((entrada) => entrada.isDirectory())
+    .map((entrada) => path.join(srcDir, entrada.name, "openapi.yaml"))
+    .filter((caminho) => existsSync(caminho));
 
 if (arquivos.length === 0) {
-    console.error(`Nenhum contrato encontrado em ${contratosDir}`);
+    console.error(`Nenhum contrato encontrado em ${srcDir}/*/openapi.yaml`);
     process.exit(1);
 }
 
 let algumFalhou = false;
-for (const arquivo of arquivos) {
-    const erros = validarArquivo(arquivo);
+for (const caminho of arquivos) {
+    const rotulo = path.relative(path.resolve(__dirname, ".."), caminho);
+    const erros = validarArquivo(caminho);
     if (erros.length === 0) {
-        console.log(`OK  ${arquivo}`);
+        console.log(`OK  ${rotulo}`);
     } else {
         algumFalhou = true;
-        console.error(`FALHA  ${arquivo}`);
+        console.error(`FALHA  ${rotulo}`);
         erros.forEach((erro) => console.error(`  - ${erro}`));
     }
 }
