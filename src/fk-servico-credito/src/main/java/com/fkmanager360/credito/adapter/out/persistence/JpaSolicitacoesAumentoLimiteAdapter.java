@@ -20,12 +20,14 @@ import com.fkmanager360.credito.domain.IdempotencyKey;
 import com.fkmanager360.credito.domain.SolicitacaoId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.postgresql.util.PSQLException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.stereotype.Repository;
 
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -68,8 +70,11 @@ public class JpaSolicitacoesAumentoLimiteAdapter implements SolicitacoesAumentoL
             operacoes.registrarTx1(dados, novaId);
             return new SolicitacaoCriada(new SolicitacaoId(novaId));
         } catch (DataIntegrityViolationException conflito) {
-            log.info("Conflito ao registrar SolicitacaoAumentoLimite {}; reclassificando pela "
-                            + "releitura do registro de idempotencia", novaId, conflito);
+            // A excecao NAO e passada ao logger de proposito -- ver Javadoc de
+            // nomeDaConstraintViolada. O nome da constraint e o diagnostico util, e e seguro.
+            log.info("Conflito ao registrar SolicitacaoAumentoLimite {} (constraint={}); "
+                            + "reclassificando pela releitura do registro de idempotencia",
+                    novaId, nomeDaConstraintViolada(conflito).orElse("desconhecida"));
             return reclassificarAposConflitoDeTx1(dados.originadorId(), dados.idempotencyKey());
         }
     }
@@ -78,6 +83,42 @@ public class JpaSolicitacoesAumentoLimiteAdapter implements SolicitacoesAumentoL
         return registroIdempotencia.buscar(originadorId, key)
                 .<ResultadoRegistroSolicitacao>map(RegistroIdempotenteEncontrado::new)
                 .orElseGet(SolicitacaoNaoTerminalExistente::new);
+    }
+
+    /**
+     * Nome da constraint PostgreSQL que originou a colisao -- {@code uk_solicitacao_nao_terminal_por_conta}
+     * ou {@code pk_registro_idempotencia} --, em melhor esforco, caminhando a cadeia de causas ate
+     * a {@link PSQLException} raiz.
+     *
+     * <p><b>Isto e SOMENTE diagnostico, e nunca pode voltar a determinar a resposta</b> (achado C2
+     * do code review de #0003, que restaurou o que a migracao para JPA havia perdido). Quem decide
+     * entre replay e "ja existe nao terminal para esta conta" e exclusivamente a releitura de
+     * {@code registro_idempotencia} apos o rollback, em {@link #reclassificarAposConflitoDeTx1} --
+     * porque a ordem fisica dos INSERTs faz a corrida "mesma key, mesma conta" colidir no indice de
+     * conta mesmo sendo, semanticamente, idempotencia. Classificar pela constraint devolveria um
+     * {@code SOLICITACAO_NAO_TERMINAL_EXISTENTE} falso; o nome dela serve para o operador entender
+     * o log, e para nada mais.
+     *
+     * <p><b>Por que a {@link DataIntegrityViolationException} nao vai para o logger junto.</b> O
+     * PostgreSQL acompanha toda violacao de constraint de uma clausula {@code DETAIL} com os
+     * VALORES da chave em conflito -- numa colisao de {@code pk_registro_idempotencia} isso e
+     * literalmente {@code Key (originador_id, idempotency_key)=(gerente.a, <uuid>) already exists}
+     * --, e o pgjdbc a inclui na mensagem da {@link PSQLException} por padrao
+     * ({@code logServerErrorDetail=true}). Passar a excecao como throwable ao SLF4J colocaria a
+     * {@code Idempotency-Key} completa no log, que e exatamente o que ADR-0017 proibe. O nome da
+     * constraint sozinho e identificador de schema, nao dado de negocio: da ao operador o
+     * diagnostico que importa (qual invariante colidiu) sem carregar nada do Cliente. Verificado
+     * contra o PostgreSQL real durante o code review de #0003.
+     */
+    private static Optional<String> nomeDaConstraintViolada(DataIntegrityViolationException e) {
+        Throwable causa = e.getCause();
+        while (causa != null) {
+            if (causa instanceof PSQLException psql && psql.getServerErrorMessage() != null) {
+                return Optional.ofNullable(psql.getServerErrorMessage().getConstraint());
+            }
+            causa = causa.getCause();
+        }
+        return Optional.empty();
     }
 
     /**

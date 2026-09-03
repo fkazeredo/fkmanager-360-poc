@@ -1,12 +1,13 @@
 ---
 id: 0003
 title: Gerente registra a solicitação e recebe a decisão automática
-state: open
+state: closed
 triage: ready-for-agent
 spec: docs/specs/slice-1-straight-through-approval.md
 blocked_by: [0002]
 assignee:
 created: 2026-09-02
+closed: 2026-09-03
 ---
 
 # 0003 — Gerente registra a solicitação e recebe a decisão automática
@@ -294,3 +295,65 @@ CRUD" e consolidá-las; o Owner restringiu o escopo depois, e a revisão não fo
 "usar JPA e Lombok e mudar uma porta".
 
 **Status nesta data: aguardando code review, agora sobre o delta já refatorado.**
+
+### 2026-09-03 — franklin.azeredo
+
+`/code-review` sobre `develop...feature/0003-submissao-e-decisao-automatica` — o delta completo da
+branch, não só o último commit: #0003 inteiro mais o que o refactoring JPA/Lombok/porta-4200 mudou
+em código já mergeado de #0001/#0002. Quatro eixos em paralelo: Standards, Spec, integridade do
+refactor, e transações/concorrência.
+
+**Resultado: 0 BLOCKER, 1 IMPORTANT, 4 COSMETIC, 3 ACCEPTED TRADEOFF.**
+
+**A fronteira do hexágono foi verificada independentemente**, não pelo comando que o Log anterior
+citava: `git diff develop...HEAD --numstat -- '*/domain/*' '*/application/*'` devolve **zero
+deleções** em 70 arquivos — todos são adições puras de #0003, e o refactor não tocou nenhum.
+
+**I1 (IMPORTANT) — lacuna de concorrência no nível do caso de uso.** `DecidirSolicitacaoAumentoLimite`
+calcula `DecisaoCredito`, `EfetivacaoId`, `messageId` e a entrada de histórico **antes** de TX2, então
+duas execuções concorrentes chegam ao lock com identificadores locais diferentes. A suíte só provava
+contenção no nível do *adapter*, onde cada thread já recebia a `IntencaoEfetivacao` pronta — a
+propriedade um nível acima ficava garantida por inspeção, não por teste. Fechado em dois seams:
+`decidirSolicitacao_duasExecucoesConcorrentesDoCasoDeUso_apenasUmaDecideENadaEDuplicado` (S3, caso de
+uso real sobre o adapter real contra PostgreSQL, duas threads sincronizadas por `CyclicBarrier`) e
+`metrica_duasSubmissoesConcorrentesComUmaUnicaDecisaoNova_incrementaOMeterUmaUnicaVez` (S6, duas
+requisições HTTP concorrentes). A divisão respeita ADR-0017: Micrometer não foi movido para
+application só para facilitar o teste. O teste S3 foi **falsificado empiricamente** — trocando o
+guard de status de TX2 por `false`, ele vai a vermelho; revertido em seguida.
+
+**C1 — duplicação de validação no BFF.** `IDENTIFICADOR_HOST` e `validarIdentificador` eram byte a
+byte idênticos em dois controllers do mesmo módulo. A exceção de ADR-0011 cobre duplicação *entre*
+bounded contexts, não interna. Extraído para `IdentificadorHost`, package-private, preservando regex,
+mensagem, exceção, status e `codigo`.
+
+**C2 — diagnóstico da constraint em conflito de TX1**, perdido na migração para JPA, restaurado
+apenas no log. A resposta continua decidida exclusivamente pela releitura idempotente após rollback.
+E aqui a rodada encontrou algo que o re-review tinha classificado como fora de escopo: o PostgreSQL
+acompanha toda violação de constraint de uma cláusula `DETAIL` com os **valores** da chave, e o
+pgjdbc a inclui na mensagem da exceção por padrão. Passar a exceção ao logger colocaria a
+`Idempotency-Key` completa no log — exatamente o que ADR-0017 proíbe. Verificado contra o PostgreSQL
+real; a exceção deixou de ser passada ao SLF4J, e o nome da constraint (identificador de schema, não
+dado de negócio) entrega o diagnóstico sozinho.
+
+**C3 — `@Qualifier` redundante em `CarteiraClientes`: ACCEPTED / NO CHANGE.** A dependência explícita
+reduz fragilidade caso um segundo `RestClient` apareça.
+
+**C4 — default HTTP inconsistente** em `bff-gerente/application.yml` corrigido para
+`https://localhost:4200`. Busca residual: as demais ocorrências de `http://localhost:<porta>` são
+portas internas de serviço ou o dev-server do Angular, não a origem pública.
+
+**T1, T2, T3 mantidos como ACCEPTED TRADEOFF**, sem alteração: `RegistroIdempotenciaPort` segue em
+`DEFERRED DESIGN REVIEW`; a regra ArchUnit de Lombok segue dependendo de
+`lombok.addLombokGeneratedAnnotation` (já falsificada empiricamente); o `saveAndFlush` do Outbox segue
+com o SELECT de merge-detection, que roda dentro do lock de TX2 e não justifica `Persistable`.
+
+**Higiene**: os agentes de review deixaram um `logback-test.xml` untracked que ligava SQL DEBUG em
+toda execução de teste; nunca esteve em commit algum, removido.
+
+**Re-review: 0 BLOCKER, 0 IMPORTANT, I1 RESOLVED.** Gates completos verdes — `./mvnw clean verify`
+**448 testes**, Angular **34**, OpenAPI **4/4**, auditoria de segredos limpa, `docker compose down -v`
++ `up --build` com **8/8 serviços saudáveis** e logs sem erro, Playwright **11/11** contra
+`https://localhost:4200` (incluindo AC19 com cookie `Secure`, AC20 com CSRF e restart do BFF, e AC30).
+Nenhuma regressão em #0001/#0002.
+
+**Ticket fechado.**

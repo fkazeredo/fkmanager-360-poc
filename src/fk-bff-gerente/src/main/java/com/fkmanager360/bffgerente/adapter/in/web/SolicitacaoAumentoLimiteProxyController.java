@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 
-import java.util.regex.Pattern;
 
 /**
  * Proxy autenticado da submissao (plano #0003, secao 9 "bff-gerente"). Encaminhamento puro, sem
@@ -38,8 +37,6 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class SolicitacaoAumentoLimiteProxyController {
 
-    private static final Pattern IDENTIFICADOR_HOST = Pattern.compile("[0-9]{1,10}");
-
     private final RestClient creditoRestClient;
     private final DelegatedTokenResolver tokenResolver;
 
@@ -50,8 +47,8 @@ public class SolicitacaoAumentoLimiteProxyController {
             @RequestBody String corpoCru,
             Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
 
-        validarIdentificador(clienteId, "clienteId");
-        validarIdentificador(contaId, "contaId");
+        IdentificadorHost.validar(clienteId, "clienteId");
+        IdentificadorHost.validar(contaId, "contaId");
 
         String tokenDelegado = tokenResolver.tokenPara(
                 TokenExchangeConfig.REGISTRATION_CREDITO_ESCRITA, authentication, request, response);
@@ -76,16 +73,5 @@ public class SolicitacaoAumentoLimiteProxyController {
         return ResponseEntity.status(upstream.getStatusCode())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(upstream.getBody());
-    }
-
-    /**
-     * Mesmo padrao/regex ja usado em {@link AtendimentoController#validarIdentificador} (privado
-     * la, replicado aqui): um identificador fora do formato host nunca deveria virar uma chamada
-     * remota que so vai falhar la na frente.
-     */
-    private static void validarIdentificador(String valor, String nomeDoCampo) {
-        if (valor == null || !IDENTIFICADOR_HOST.matcher(valor).matches()) {
-            throw new IllegalArgumentException(nomeDoCampo + " deve ser numerico, com ate 10 digitos: " + valor);
-        }
     }
 }

@@ -7,6 +7,7 @@ import com.fkmanager360.credito.adapter.out.persistence.entity.OutboxMensagemEnt
 import com.fkmanager360.credito.adapter.out.persistence.entity.RegistroIdempotenciaEntity;
 import com.fkmanager360.credito.adapter.out.persistence.entity.SolicitacaoAumentoLimiteEntity;
 import com.fkmanager360.credito.adapter.out.persistence.repository.SolicitacaoAumentoLimiteRepository;
+import com.fkmanager360.credito.application.ResultadoSubmissao;
 import com.fkmanager360.credito.application.port.out.CargaParaDecisao;
 import com.fkmanager360.credito.application.port.out.EntradaHistorico;
 import com.fkmanager360.credito.application.port.out.IdempotenciaEmProcessamentoException;
@@ -35,7 +36,10 @@ import com.fkmanager360.credito.domain.IdempotencyKey;
 import com.fkmanager360.credito.domain.LimiteChequeEspecialVigente;
 import com.fkmanager360.credito.domain.LimiteSolicitado;
 import com.fkmanager360.credito.domain.ManifestacaoCliente;
+import com.fkmanager360.credito.application.usecase.DecidirSolicitacaoAumentoLimite;
 import com.fkmanager360.credito.domain.MotivoDecisaoCredito;
+import com.fkmanager360.credito.domain.MotorDecisaoCredito;
+import com.fkmanager360.credito.domain.PoliticaCreditoV1;
 import com.fkmanager360.credito.domain.OrigemSolicitacao;
 import com.fkmanager360.credito.domain.ResultadoDecisaoCredito;
 import com.fkmanager360.credito.domain.SituacaoConta;
@@ -85,6 +89,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
+import java.util.function.Supplier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -723,6 +728,115 @@ class JpaSolicitacoesAumentoLimiteAdapterTest {
         }
 
         assertThat(contarPor("decisao_credito", "solicitacao_id", id.valor())).isEqualTo(1L);
+    }
+
+    /**
+     * Achado I1 do code review de #0003. O teste acima prova a contencao no nivel do ADAPTER, onde
+     * cada thread ja recebe pronta a {@link IntencaoEfetivacao} que vai gravar. Isso deixava sem
+     * falsificacao a propriedade que existe um nivel acima: {@code DecidirSolicitacaoAumentoLimite}
+     * calcula {@code DecisaoCredito}, {@code EfetivacaoId}, {@code messageId} e a
+     * {@link EntradaHistorico} <b>antes</b> de TX2 (Fase 2 do plano), entao duas execucoes
+     * concorrentes chegam ao lock com identificadores locais <b>diferentes</b> -- e so um conjunto
+     * pode sobreviver. Sem este teste, acrescentar {@code efetivacaoId} a resposta, ou mover o
+     * incremento da metrica para fora do guard de {@code decidiuAgora}, passaria despercebido.
+     *
+     * <p>O caso de uso e construido aqui sobre o adapter REAL e o {@link MotorDecisaoCredito} real
+     * -- nenhuma porta de persistencia mockada. O contexto congelado desta solicitacao produz
+     * {@code APROVADA} pela {@code PoliticaCreditoV1} (conta regular, risco BAIXO, R$ 6.000,00
+     * solicitados sobre R$ 5.000,00 vigentes, incremento de R$ 1.000,00 -- dentro das duas
+     * faixas), entao o ramo com Outbox, que e o mais rico, e o exercitado.
+     *
+     * <p><b>Dois desfechos sao legitimos para a perdedora</b>, e o teste aceita os dois sem
+     * afrouxar a asserção: se ela alcanca o {@code FOR UPDATE NOWAIT} enquanto a vencedora ainda
+     * nao commitou, recebe {@link IdempotenciaEmProcessamentoException} (o mesmo 409 que o gerente
+     * veria); se chega depois do commit, recebe {@code decidiuAgora=false}. No primeiro caso o
+     * teste refaz a chamada -- exatamente o que o cliente faz ao repetir a requisicao com a mesma
+     * Idempotency-Key -- e exige que ai devolva {@code decidiuAgora=false} com a decisao ja
+     * persistida. O invariante e o mesmo nos dois caminhos: <b>exatamente um
+     * {@code decidiuAgora=true}</b>, e uma unica linha em cada tabela.
+     */
+    @Test
+    void decidirSolicitacao_duasExecucoesConcorrentesDoCasoDeUso_apenasUmaDecideENadaEDuplicado() throws Exception {
+        ContaId contaId = novaContaId();
+        SolicitacaoId id = registrarNova(contaId, novaIdempotencyKey(), "fp-i1-concorrente");
+        Instant decididaEm = Instant.parse("2026-09-03T10:00:00Z");
+
+        DecidirSolicitacaoAumentoLimite decidir = new DecidirSolicitacaoAumentoLimite(
+                adapter,
+                new MotorDecisaoCredito(List.of(new PoliticaCreditoV1()), new VersaoPoliticaCredito("v1")));
+
+        List<ResultadoOuFalha> disputados = executarConcorrentemente(
+                () -> ResultadoOuFalha.de(() -> decidir.executar(id, decididaEm)),
+                () -> ResultadoOuFalha.de(() -> decidir.executar(id, decididaEm)));
+
+        List<ResultadoSubmissao> observados = new ArrayList<>();
+        for (ResultadoOuFalha disputado : disputados) {
+            if (disputado.falhou()) {
+                assertThat(disputado.falha())
+                        .as("a unica falha aceitavel na perdedora e contencao de lock, nunca outro erro")
+                        .isInstanceOf(IdempotenciaEmProcessamentoException.class);
+                observados.add(decidir.executar(id, decididaEm));
+            } else {
+                observados.add(disputado.valor());
+            }
+        }
+
+        assertThat(observados.stream().filter(ResultadoSubmissao::decidiuAgora).count())
+                .as("exatamente uma execucao pode ter decidido de fato")
+                .isEqualTo(1L);
+        assertThat(observados.stream().filter(r -> !r.decidiuAgora()).count())
+                .as("a outra observa a decisao ja persistida, sem reescrever nada")
+                .isEqualTo(1L);
+
+        // As duas convergem na MESMA decisao: a perdedora descarta o que calculou na Fase 2.
+        assertThat(observados.get(1).decisao()).isEqualTo(observados.get(0).decisao());
+        assertThat(observados.get(0).decisao().resultado()).isEqualTo(ResultadoDecisaoCredito.APROVADA);
+        assertThat(observados).allSatisfy(r ->
+                assertThat(r.status()).isEqualTo(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO));
+
+        // Estado final: nada duplicado por ter sido calculado duas vezes.
+        assertThat(contarPor("decisao_credito", "solicitacao_id", id.valor())).isEqualTo(1L);
+        assertThat(contarPor("outbox_mensagem", "solicitacao_id", id.valor())).isEqualTo(1L);
+        assertThat(appJdbcClient.sql("""
+                        select count(*) from historico_solicitacao
+                        where solicitacao_id = :id and tipo_fato = 'DECISAO_AUTOMATICA_REGISTRADA'
+                        """)
+                .param("id", id.valor()).query(Long.class).single()).isEqualTo(1L);
+
+        // Exatamente UM EfetivacaoId e UM messageId sobreviveram -- os da vencedora -- e o
+        // EfetivacaoId gravado na solicitacao e o mesmo que foi para o Outbox.
+        UUID efetivacaoIdDaSolicitacao = appJdbcClient
+                .sql("select efetivacao_id from solicitacao_aumento_limite where id = :id")
+                .param("id", id.valor()).query(UUID.class).single();
+        UUID efetivacaoIdDoOutbox = appJdbcClient
+                .sql("select efetivacao_id from outbox_mensagem where solicitacao_id = :id")
+                .param("id", id.valor()).query(UUID.class).single();
+        assertThat(efetivacaoIdDaSolicitacao).isNotNull().isEqualTo(efetivacaoIdDoOutbox);
+        assertThat(appJdbcClient.sql("select count(distinct message_id) from outbox_mensagem where solicitacao_id = :id")
+                .param("id", id.valor()).query(Long.class).single()).isEqualTo(1L);
+
+        assertThat(appJdbcClient.sql("select status from solicitacao_aumento_limite where id = :id")
+                .param("id", id.valor()).query(String.class).single())
+                .isEqualTo(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO.name());
+    }
+
+    /**
+     * Captura o desfecho de uma execucao concorrente sem que a excecao da perdedora aborte o
+     * {@code Future} antes de o teste poder classifica-la.
+     */
+    private record ResultadoOuFalha(ResultadoSubmissao valor, RuntimeException falha) {
+
+        static ResultadoOuFalha de(Supplier<ResultadoSubmissao> execucao) {
+            try {
+                return new ResultadoOuFalha(execucao.get(), null);
+            } catch (RuntimeException e) {
+                return new ResultadoOuFalha(null, e);
+            }
+        }
+
+        boolean falhou() {
+            return falha != null;
+        }
     }
 
     // ---------------------------------------------------------------------------------------

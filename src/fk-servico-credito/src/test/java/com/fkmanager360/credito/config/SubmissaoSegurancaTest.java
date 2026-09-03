@@ -53,6 +53,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -61,6 +69,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -637,6 +646,67 @@ class SubmissaoSegurancaTest {
         assertThat(totalDecisoesCredito())
                 .as("replay puro (decidiuAgora=false) nao pode incrementar a metrica de novo")
                 .isEqualTo(depoisDaPrimeira);
+    }
+
+    /**
+     * Metade S6 do achado I1 do code review. A metade S3
+     * ({@code decidirSolicitacao_duasExecucoesConcorrentesDoCasoDeUso_...}) prova, contra
+     * PostgreSQL real, que apenas uma de duas execucoes concorrentes do caso de uso obtem
+     * {@code decidiuAgora=true}. Falta provar o que acontece com o <b>meter</b> quando as duas
+     * respostas voltam ao mesmo tempo -- e isso pertence a este seam, porque Micrometer vive na
+     * borda web (ADR-0017: o dominio nao chama {@code MeterRegistry}), nunca em
+     * application/domain.
+     *
+     * <p>O stub reproduz exatamente o contrato de TX2 sob contencao: {@code aplicarDecisao}
+     * devolve {@code decidiuAgora=true} para a PRIMEIRA chamada que chegar e {@code false} para
+     * toda chamada seguinte -- que e o que o {@code FOR UPDATE NOWAIT} + a checagem de status
+     * garantem no adapter real. Se alguem mover o incremento para fora do guard de
+     * {@code decidiuAgora} em {@code MetricasDecisaoCredito}, o meter passaria a contar
+     * respostas em vez de decisoes e este teste ficaria vermelho.
+     */
+    @Test
+    void metrica_duasSubmissoesConcorrentesComUmaUnicaDecisaoNova_incrementaOMeterUmaUnicaVez() throws Exception {
+        double antes = totalDecisoesCredito();
+
+        // Somente a primeira chamada a alcancar o adapter "vence" -- as demais observam o que ja
+        // esta persistido, sem reescrever nada.
+        AtomicBoolean jaDecidiu = new AtomicBoolean(false);
+        doReturn(new CargaParaDecisao(StatusSolicitacaoAumentoLimite.SOLICITADA,
+                        contextoAprovado(), CONTA_ID, new CorrelationId(UUID.randomUUID())))
+                .when(solicitacoesAumentoLimitePort).carregarParaDecisao(SOLICITACAO_ID_PADRAO);
+        doAnswer(invocacao -> new ResultadoAplicacaoDecisao(
+                        jaDecidiu.compareAndSet(false, true),
+                        StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO,
+                        decisaoAprovada()))
+                .when(solicitacoesAumentoLimitePort).aplicarDecisao(eq(SOLICITACAO_ID_PADRAO), any(), any(), any());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            CyclicBarrier largada = new CyclicBarrier(2);
+            List<Future<Integer>> respostas = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                respostas.add(executor.submit(() -> {
+                    largada.await(10, TimeUnit.SECONDS);
+                    return mockMvc.perform(post(ENDPOINT_POST)
+                                    .header("Authorization", "Bearer " + tokenParaEscrita("gerente.metrica.concorrente"))
+                                    .header("Idempotency-Key", UUID.randomUUID().toString())
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(CORPO_APROVADO))
+                            .andReturn().getResponse().getStatus();
+                }));
+            }
+            for (Future<Integer> resposta : respostas) {
+                assertThat(resposta.get(15, TimeUnit.SECONDS))
+                        .as("as duas requisicoes concorrentes precisam ser respondidas com sucesso")
+                        .isIn(200, 201);
+            }
+        } finally {
+            executor.shutdown();
+        }
+
+        assertThat(totalDecisoesCredito() - antes)
+                .as("duas respostas concorrentes, uma unica decisao nova: o meter conta decisoes, nao respostas")
+                .isEqualTo(1.0);
     }
 
     // --- Helpers -----------------------------------------------------------------------------
