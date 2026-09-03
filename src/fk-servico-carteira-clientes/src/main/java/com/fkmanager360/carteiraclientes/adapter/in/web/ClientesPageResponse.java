@@ -2,6 +2,7 @@ package com.fkmanager360.carteiraclientes.adapter.in.web;
 
 import com.fkmanager360.carteiraclientes.domain.ClienteDaCarteira;
 import com.fkmanager360.carteiraclientes.domain.PageResult;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
@@ -9,7 +10,11 @@ import java.util.List;
 // ja exercitado por Angular/Playwright -- nao mudam so porque PageResult, internamente, agora usa
 // nomes tecnicos em ingles (items/page/size/totalElements/totalPages).
 record ClientesPageResponse(
-        List<ClienteResumoResponse> itens, int pagina, int tamanho, long totalElementos, long totalPaginas) {
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ClienteResumoResponse> itens,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int pagina,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int tamanho,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long totalElementos,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long totalPaginas) {
 
     static ClientesPageResponse de(PageResult<ClienteDaCarteira> pageResult) {
         return new ClientesPageResponse(

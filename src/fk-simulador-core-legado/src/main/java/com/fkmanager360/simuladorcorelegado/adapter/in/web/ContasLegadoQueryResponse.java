@@ -1,5 +1,7 @@
 package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -7,9 +9,14 @@ import java.util.List;
  * de negocio (ADR-0005): "nenhuma ocorrencia" chega como {@code codRet} "121", nao como 404.
  */
 public record ContasLegadoQueryResponse(
+        @Schema(description = "\"000\" sucesso; \"121\" nenhuma conta encontrada.", example = "000",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String codRet,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         String msgRet,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         String codCli,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         List<ContaLegadoItemResponse> contas
 ) {
 

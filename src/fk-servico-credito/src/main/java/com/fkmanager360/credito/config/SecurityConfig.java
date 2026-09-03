@@ -47,6 +47,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        // Documentacao, nao dado de negocio (ADR-0019): o contrato gerado
+                        // (src/fk-servico-credito/openapi.yaml) e regenerado a partir destes
+                        // mesmos paths -- exigir token aqui so quebraria a propria regeneracao.
+                        .requestMatchers("/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**",
+                                "/swagger-ui.html", "/swagger-ui/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/clientes/*/contas/*/limite-cheque-especial-vigente")
                                 .access(new WebExpressionAuthorizationManager(
                                         "hasAuthority('SCOPE_credito.leitura') and hasRole('GERENTE_RELACIONAMENTO')"))
