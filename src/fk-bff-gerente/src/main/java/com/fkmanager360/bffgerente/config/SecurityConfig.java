@@ -4,11 +4,15 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
@@ -16,14 +20,17 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 
@@ -41,7 +48,8 @@ public class SecurityConfig {
     SecurityFilterChain filterChain(
             HttpSecurity http,
             ClientRegistrationRepository clientRegistrationRepository,
-            @Value("${bff-gerente.app-public-url}") String appPublicUrl) throws Exception {
+            @Value("${bff-gerente.app-public-url}") String appPublicUrl,
+            @Value("${bff-gerente.end-session-endpoint}") String endSessionEndpoint) throws Exception {
         OAuth2AuthorizationRequestResolver pkceRequiredResolver = mandatoryPkce(clientRegistrationRepository);
 
         http
@@ -65,8 +73,7 @@ public class SecurityConfig {
                         PathPatternRequestMatcher.withDefaults().matcher("/api/**")))
                 .logout(logout -> logout
                         .logoutUrl("/logout")
-                        .logoutSuccessHandler((request, response, authentication) ->
-                                response.setStatus(HttpStatus.NO_CONTENT.value())))
+                        .logoutSuccessHandler(rpInitiatedLogoutHandler(appPublicUrl, endSessionEndpoint)))
                 .csrf(csrf -> csrf
                         // Convencao do Angular: le o cookie XSRF-TOKEN (nao HttpOnly, para o JS
                         // conseguir ler) e devolve como header X-XSRF-TOKEN. Path explicito "/":
@@ -101,6 +108,39 @@ public class SecurityConfig {
     @Bean
     OAuth2AuthorizedClientRepository authorizedClientRepository() {
         return new HttpSessionOAuth2AuthorizedClientRepository();
+    }
+
+    /**
+     * RP-Initiated Logout (OIDC): encerrar so a sessao local do BFF deixava a sessao SSO viva no
+     * servidor-autorizacao -- "Sair" seguido de "Entrar" logava de volta sem pedir senha. O
+     * handler devolve, num corpo JSON, a URL publica de end-session
+     * ({@code /connect/logout?id_token_hint=...&post_logout_redirect_uri=...}) para a SPA navegar
+     * ate la: o logout OIDC exige navegacao real do browser (o cookie de sessao do
+     * servidor-autorizacao viaja nela), entao um redirect 302 nesta resposta XHR nao serviria --
+     * fetch seguiria o redirect por baixo dos panos, sem trocar a pagina.
+     *
+     * <p>A URL usa a origem PUBLICA (nginx), como {@code authorization-uri} -- e o browser quem
+     * visita. O {@code post_logout_redirect_uri} precisa casar exatamente com o valor registrado
+     * no client ({@code RegisteredClientsConfig}), por isso reusa {@code app-public-url}.
+     *
+     * <p>Sem OidcUser na autenticacao (sessao ja expirada, por exemplo) nao ha id_token_hint a
+     * enviar: o corpo devolve a origem publica direta e o desfecho e o mesmo de antes -- apenas a
+     * sessao local morta.
+     */
+    private static LogoutSuccessHandler rpInitiatedLogoutHandler(String appPublicUrl, String endSessionEndpoint) {
+        return (HttpServletRequest request, HttpServletResponse response, Authentication authentication) -> {
+            String redirectUrl = appPublicUrl;
+            if (authentication != null && authentication.getPrincipal() instanceof OidcUser oidcUser) {
+                redirectUrl = UriComponentsBuilder.fromUriString(endSessionEndpoint)
+                        .queryParam("id_token_hint", oidcUser.getIdToken().getTokenValue())
+                        .queryParam("post_logout_redirect_uri", appPublicUrl)
+                        .build()
+                        .toUriString();
+            }
+            response.setStatus(HttpStatus.OK.value());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.getWriter().write("{\"redirectUrl\":\"" + redirectUrl + "\"}");
+        };
     }
 
     private static CookieCsrfTokenRepository csrfTokenRepository() {

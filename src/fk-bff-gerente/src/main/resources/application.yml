@@ -75,6 +75,9 @@ bff-gerente:
   # Mesma origem publica que o browser ja usa para /oauth2/authorize (ver provider acima) --
   # e tambem onde app-gerente/nginx serve a SPA de verdade, entao e o alvo certo pos-login.
   app-public-url: ${AUTH_SERVER_PUBLIC_URL:https://localhost:4200}/
+  # Endpoint OIDC de end-session do servidor-autorizacao, na origem PUBLICA: quem navega ate ele
+  # e o browser (RP-Initiated Logout), pelo mesmo caminho nginx de /oauth2/authorize e /login.
+  end-session-endpoint: ${AUTH_SERVER_PUBLIC_URL:https://localhost:4200}/connect/logout
   carteira-clientes:
     base-url: ${CARTEIRA_CLIENTES_BASE_URL:http://localhost:8081}
     # nome logico, nao URI absoluta (RFC 8693: "resource" exige URI, "audience" nao).

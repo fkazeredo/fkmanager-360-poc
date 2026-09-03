@@ -21,8 +21,21 @@
   } @else if (items().length === 0) {
     <p class="lista-vazia">Nenhum cliente na sua carteira.</p>
   } @else {
+    <input
+      type="search"
+      class="busca-clientes"
+      placeholder="Filtrar por nome ou CPF"
+      aria-label="Filtrar clientes por nome ou CPF (atalho: barra)"
+      [value]="filtro()"
+      (input)="filtro.set($any($event.target).value)"
+      (keydown)="onBuscaKeydown($event)" />
+
+    @if (visiveis().length === 0) {
+      <p class="lista-vazia">Nenhum cliente corresponde ao filtro.</p>
+    }
+
     <ul class="lista-clientes" (keydown)="onListaKeydown($event)">
-      @for (cliente of items(); track cliente.clienteId; let primeiro = $first) {
+      @for (cliente of visiveis(); track cliente.clienteId; let primeiro = $first) {
         <li [class.selecionado]="selecionado()?.clienteId === cliente.clienteId">
           <button
             type="button"

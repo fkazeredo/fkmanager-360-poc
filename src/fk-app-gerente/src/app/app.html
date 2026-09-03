@@ -26,7 +26,12 @@
 <main>
   @if (session.loading()) {
     <p class="carregando-sessao">Carregando...</p>
-  } @else if (session.gerenteId()) {
+  } @else if (session.gerenteId(); as gerenteId) {
+    <section class="saudacao">
+      <h1>Ola, {{ gerenteId }}</h1>
+      <p>Selecione um cliente da carteira para iniciar o atendimento.</p>
+    </section>
+
     <div class="painel">
       <app-carteira-lista (clienteSelecionado)="atender($event)" />
 

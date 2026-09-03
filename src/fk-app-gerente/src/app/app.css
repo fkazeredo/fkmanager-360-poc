@@ -81,6 +81,34 @@ main {
   padding: 1.5rem;
 }
 
+.saudacao {
+  margin: 0.5rem 0 1.25rem;
+}
+
+.saudacao h1 {
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.saudacao p {
+  margin-top: 0.25rem;
+  color: var(--tinta-500);
+}
+
+@media (max-width: 40rem) {
+  main {
+    padding: 1rem;
+  }
+
+  .saudacao h1 {
+    font-size: 1.25rem;
+  }
+
+  .usuario-nome {
+    display: none;
+  }
+}
+
 .carregando-sessao {
   margin: 4rem auto;
   text-align: center;

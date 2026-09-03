@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 /** Regioes da tela que aceitam foco rapido por atalho (tecla -> regiao). */
-export type FocusTarget = 'carteira' | 'contas' | 'valor';
+export type FocusTarget = 'carteira' | 'contas' | 'valor' | 'busca';
 
 /**
  * Atalhos globais de teclado (ticket #0008): a interface e navegavel primariamente por teclado.
@@ -59,6 +59,9 @@ export class KeyboardService {
         break;
       case 'l':
         this.focar('valor', event);
+        break;
+      case '/':
+        this.focar('busca', event);
         break;
     }
   }

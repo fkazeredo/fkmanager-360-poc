@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, inject, output, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, inject, output, signal } from '@angular/core';
 import { KeyboardService } from '../../core/keyboard';
 import { ClienteResumo } from '../../core/models';
 import { iniciaisDe } from '../../shared/iniciais';
@@ -25,10 +25,24 @@ export class CarteiraLista {
   readonly loading = signal(true);
   readonly error = signal(false);
 
+  /** Filtro local sobre a pagina carregada (nome ou CPF mascarado); a paginacao continua no BFF. */
+  readonly filtro = signal('');
+  readonly visiveis = computed(() => {
+    const termo = this.filtro().trim().toLowerCase();
+    if (termo === '') {
+      return this.items();
+    }
+    return this.items().filter(
+      (cliente) =>
+        cliente.nome.toLowerCase().includes(termo) || cliente.cpfMascarado.includes(termo),
+    );
+  });
+
   constructor() {
     this.fetch(0);
-    const desregistrar = this.keyboard.registerFocusTarget('carteira', () => this.focarLista());
-    inject(DestroyRef).onDestroy(desregistrar);
+    const destroyRef = inject(DestroyRef);
+    destroyRef.onDestroy(this.keyboard.registerFocusTarget('carteira', () => this.focarLista()));
+    destroyRef.onDestroy(this.keyboard.registerFocusTarget('busca', () => this.focarBusca()));
   }
 
   fetch(page: number): void {
@@ -123,12 +137,24 @@ export class CarteiraLista {
     botoes[proximo].focus();
   }
 
+  /** ArrowDown no campo de busca pula direto para o primeiro resultado da lista. */
+  protected onBuscaKeydown(event: KeyboardEvent): void {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.focarLista();
+    }
+  }
+
   private focarLista(): void {
     const raiz = this.host.nativeElement as HTMLElement;
     const alvo =
       raiz.querySelector<HTMLButtonElement>('.lista-clientes li.selecionado .selecionar-cliente') ??
       raiz.querySelector<HTMLButtonElement>('.selecionar-cliente');
     alvo?.focus();
+  }
+
+  private focarBusca(): void {
+    (this.host.nativeElement as HTMLElement).querySelector<HTMLInputElement>('.busca-clientes')?.focus();
   }
 
   private botoesDaLista(): HTMLButtonElement[] {

@@ -61,3 +61,23 @@ caminho: a suite e2e nao e re-executavel sem reset do estado do `credito_db` —
 aprovacao deixa uma SolicitacaoAumentoLimite AGUARDANDO_EFETIVACAO (nao-terminal ate #0005), e a
 re-execucao recebe 409 SOLICITACAO_NAO_TERMINAL_EXISTENTE. Limitacao pre-existente, nao deste
 ticket.
+
+### 2026-09-03 — claude (iteracao 2, feedback do usuario)
+
+Tres problemas reportados em teste manual, todos fora do Angular:
+
+1. **Pagina de login sem estilo** — era a pagina default do Spring Security no
+   servidor-autorizacao. Novo `LoginPageController` (adapter/in/web) serve `/login` no design
+   system da plataforma; `formLogin.loginPage("/login").permitAll()` no chain default. Contrato
+   do formulario preservado (`#username`, `#password`, `button[type=submit]`, POST /login, _csrf).
+2. **"Sair" nao deslogava de verdade** — o BFF so encerrava a sessao local; a sessao SSO no
+   servidor-autorizacao continuava viva e "Entrar" logava de volta sem senha. Agora o logout e
+   RP-Initiated (OIDC): o BFF devolve a URL publica de `/connect/logout` com `id_token_hint` +
+   `post_logout_redirect_uri` num corpo JSON, a SPA navega ate la, e o nginx ganhou o proxy de
+   `/connect/`. Testes de BffSegurancaTest atualizados (200+redirectUrl; caso OIDC novo).
+3. **Aviso "Nao seguro"** — certificado autoassinado de dev (SAN ok: localhost/127.0.0.1);
+   resolve-se confiando `certs/dev-localhost.crt` no store do usuario, decisao do usuario.
+
+UX v2 (pesquisa: padrao Nubank/fintech 2026): saudacao pessoal, filtro de clientes com atalho
+`/`, contas como cards, raio 20px, alvos de toque >= 44px (WCAG), responsividade mobile real
+(painel empilha, nome do usuario some do header em telas estreitas).
