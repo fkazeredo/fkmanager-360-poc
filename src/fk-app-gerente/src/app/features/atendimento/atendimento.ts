@@ -10,6 +10,7 @@ import {
   CanalManifestacao,
   ClienteResumo,
   ContaResumo,
+  EnvelopeErroPublico,
   SolicitacaoAumentoLimiteComando,
   SolicitacaoAumentoLimiteResultado,
 } from '../../core/models';
@@ -312,7 +313,8 @@ export class AtendimentoComponent {
 
   private tratarErroSubmissao(resposta: HttpErrorResponse, clienteId: string, contaId: string): void {
     const status = resposta.status;
-    const codigo: string | undefined = resposta.error?.codigo;
+    const erro: EnvelopeErroPublico | null = resposta.error ?? null;
+    const codigo: string | undefined = erro?.codigo;
 
     // 409 LIMITE_VIGENTE_DESATUALIZADO -- e SO quando o codigo e exatamente este (plano #0003).
     // O gerente decide quando reenviar; nao ha reenvio automatico.

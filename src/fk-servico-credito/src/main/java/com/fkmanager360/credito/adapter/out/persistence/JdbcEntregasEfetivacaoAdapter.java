@@ -59,7 +59,7 @@ import java.util.UUID;
 @Repository
 @RequiredArgsConstructor
 @Slf4j
-public class JpaEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
+public class JdbcEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
 
     private final JdbcClient jdbcClient;
     private final SolicitacaoAumentoLimiteRepository solicitacaoRepository;
@@ -103,7 +103,7 @@ public class JpaEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
             // Crash entre o commit do claim e o envio HTTP da ultima tentativa reservada -- ou
             // esgotamento normal apos respostas transitorias -- sob o MESMO lock que reclamaria a
             // entrega (plano #0004, secao 1, regra normativa do Owner). Nenhum novo episodio HTTP.
-            terminalizar(candidato.messageId(), "ESGOTADA", null, null, agora);
+            terminalizar(candidato.messageId(), StatusEntrega.ESGOTADA, null, null, agora);
             return new ReclamacaoEntrega.EsgotadaAgora();
         }
 
@@ -172,7 +172,7 @@ public class JpaEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
             resultado = ResultadoRegistroEntrega.APLICADO_COM_ANOMALIA_PROTOCOLO_DIVERGENTE;
         }
 
-        terminalizar(claim.intencao().messageId(), "ACEITA", "ACEITE", null, agora);
+        terminalizar(claim.intencao().messageId(), StatusEntrega.ACEITA, ClasseResultado.ACEITE, null, agora);
         return resultado;
     }
 
@@ -189,10 +189,11 @@ public class JpaEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
         jdbcClient.sql("""
                 update outbox_entrega
                 set proxima_tentativa_em = :proximaTentativaEm, claim_id = null, claim_expira_em = null,
-                    ultima_classe_resultado = 'TRANSITORIO', ultimo_erro = :erro, atualizado_em = :agora
+                    ultima_classe_resultado = :classeResultado, ultimo_erro = :erro, atualizado_em = :agora
                 where message_id = :messageId
                 """)
                 .param("proximaTentativaEm", Timestamp.from(proximaTentativaEm))
+                .param("classeResultado", ClasseResultado.TRANSITORIO.name())
                 .param("erro", erroSanitizado, Types.VARCHAR)
                 .param("agora", Timestamp.from(agora))
                 .param("messageId", claim.intencao().messageId())
@@ -210,7 +211,7 @@ public class JpaEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
 
         // OD-3: para sem concluir nada -- nenhuma escrita em solicitacao_aumento_limite nem
         // historico. Recuperacao pertence a #0006.
-        terminalizar(claim.intencao().messageId(), "INDETERMINADA", "INDETERMINADO", erroSanitizado, agora);
+        terminalizar(claim.intencao().messageId(), StatusEntrega.INDETERMINADA, ClasseResultado.INDETERMINADO, erroSanitizado, agora);
         return ResultadoRegistroEntrega.APLICADO;
     }
 
@@ -229,7 +230,7 @@ public class JpaEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
                 claim.intencao().efetivacaoId(), new ResultadoEfetivacaoRecebido.FalhaDefinitiva(motivo),
                 AtorSistema.CORE_LEGADO, agora);
 
-        terminalizar(claim.intencao().messageId(), "FALHA_DEFINITIVA", "DEFINITIVO", null, agora);
+        terminalizar(claim.intencao().messageId(), StatusEntrega.FALHA_DEFINITIVA, ClasseResultado.DEFINITIVO, null, agora);
 
         // conclusao.concluiuAgora() e SEMPRE true aqui em #0004: o fencing acima garante que so um
         // worker chega neste ponto por entrega, e nenhum outro caminho deste ticket alcanca
@@ -261,23 +262,38 @@ public class JpaEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
                 .query((rs, rowNum) -> new FencingRow(rs.getString("status_entrega"), (UUID) rs.getObject("claim_id")))
                 .optional();
 
-        return linha.filter(l -> "PENDENTE".equals(l.statusEntrega()) && claim.claimId().equals(l.claimId()))
+        return linha.filter(l -> StatusEntrega.PENDENTE.name().equals(l.statusEntrega()) && claim.claimId().equals(l.claimId()))
                 .isPresent();
     }
 
-    private void terminalizar(UUID messageId, String statusFinal, String classeResultadoOuNull, String erroOuNull, Instant agora) {
+    private void terminalizar(UUID messageId, StatusEntrega statusFinal, ClasseResultado classeResultadoOuNull,
+                              String erroOuNull, Instant agora) {
         jdbcClient.sql("""
                 update outbox_entrega
                 set status_entrega = :statusFinal, claim_id = null, claim_expira_em = null, proxima_tentativa_em = null,
                     ultima_classe_resultado = :classeResultado, ultimo_erro = :erro, atualizado_em = :agora
                 where message_id = :messageId
                 """)
-                .param("statusFinal", statusFinal)
-                .param("classeResultado", classeResultadoOuNull, Types.VARCHAR)
+                .param("statusFinal", statusFinal.name())
+                .param("classeResultado", classeResultadoOuNull == null ? null : classeResultadoOuNull.name(), Types.VARCHAR)
                 .param("erro", erroOuNull, Types.VARCHAR)
                 .param("agora", Timestamp.from(agora))
                 .param("messageId", messageId)
                 .update();
+    }
+
+    /**
+     * Espelho 1:1 do CHECK {@code ck_outbox_entrega_status} de V2 -- o {@code name()} e o que vai
+     * para a coluna. Privado ao adapter de proposito: estado de ENTREGA nunca e estado de negocio
+     * (plano #0004, secao 2), entao o tipo nao pertence ao dominio nem a application.
+     */
+    private enum StatusEntrega {
+        PENDENTE, ACEITA, FALHA_DEFINITIVA, ESGOTADA, INDETERMINADA
+    }
+
+    /** Espelho 1:1 dos valores de {@code ultima_classe_resultado} (V2). */
+    private enum ClasseResultado {
+        ACEITE, TRANSITORIO, DEFINITIVO, INDETERMINADO
     }
 
     private record CandidatoEntrega(

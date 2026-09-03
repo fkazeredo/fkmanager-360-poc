@@ -127,7 +127,7 @@ public class SolicitacaoAumentoLimiteController {
         metricasDecisaoCredito.registrarDecisao(resultado);
 
         HttpStatus status = resultado.criacaoNova() ? HttpStatus.CREATED : HttpStatus.OK;
-        return ResponseEntity.status(status).body(SolicitacaoAumentoLimiteResponse.de(resultado, agora));
+        return ResponseEntity.status(status).body(SolicitacaoAumentoLimiteResponse.de(resultado));
     }
 
     private static IdempotencyKey parsearIdempotencyKey(String idempotencyKeyHeader) {

@@ -23,16 +23,19 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("fk-simulador-core-legado")
-                        .version("0002")
+                        .version("0004")
                         .description("Sistema externo simulado (nao e um bounded context deste "
                                 + "repositorio). Contrato host-centrico FICTICIO desta POC (ADR-0005) -- "
-                                + "nao e replica de nenhum core bancario real. Tres capacidades: consulta "
+                                + "nao e replica de nenhum core bancario real. Quatro capacidades: consulta "
                                 + "em lote dos dados mestres do Cliente e consulta das contas de um "
-                                + "Cliente, ambas consumidas pela ACL de fk-servico-carteira-clientes; e "
-                                + "consulta dos dados de credito de uma conta, consumida pela ACL de "
-                                + "fk-servico-credito. Cada contexto integra o legado pela sua propria ACL, "
-                                + "apenas na fatia que lhe diz respeito (ADR-0004). fk-bff-gerente nunca "
-                                + "chama este servico diretamente (AC30)."))
+                                + "Cliente, ambas consumidas pela ACL de fk-servico-carteira-clientes; "
+                                + "consulta dos dados de credito de uma conta e recepcao da instrucao de "
+                                + "efetivacao, ambas consumidas pela ACL de fk-servico-credito. Cada "
+                                + "contexto integra o legado pela sua propria ACL, apenas na fatia que lhe "
+                                + "diz respeito (ADR-0004). fk-bff-gerente nunca chama este servico "
+                                + "diretamente (AC30). O control plane de cenarios de efetivacao "
+                                + "(ADR-0018), ativo apenas nos profiles local/demo/test, e deliberadamente "
+                                + "separado deste contrato funcional e nao aparece aqui."))
                 .servers(List.of(new Server()
                         .url("http://localhost:8090")
                         .description("Rede interna do Docker Compose (nome de servico), porta exposta localmente para dev.")));

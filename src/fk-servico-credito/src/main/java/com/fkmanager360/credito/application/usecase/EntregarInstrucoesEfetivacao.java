@@ -34,8 +34,8 @@ import java.util.Objects;
  * do retorno do Core: a chamada HTTP pode levar segundos (timeout de leitura configurado em
  * {@code coreLegadoRestClient}), e reusar o instante pre-HTTP para calcular
  * {@code proximaTentativaEm} ou a permanencia em AGUARDANDO_EFETIVACAO subtrairia essa latencia do
- * backoff e subestimaria a metrica -- um instante capturado agora pode already estar no passado
- * quando TX-B commita.
+ * backoff e subestimaria a metrica -- um instante capturado antes do envio pode ja estar no
+ * passado quando TX-B commita.
  */
 public class EntregarInstrucoesEfetivacao {
 

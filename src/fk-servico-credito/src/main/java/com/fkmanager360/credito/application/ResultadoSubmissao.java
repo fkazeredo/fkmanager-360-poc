@@ -8,6 +8,7 @@ import com.fkmanager360.credito.domain.LimiteSolicitado;
 import com.fkmanager360.credito.domain.SolicitacaoId;
 import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
 
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -35,6 +36,7 @@ public record ResultadoSubmissao(
         LimiteChequeEspecialVigente limiteChequeEspecialVigente,
         LimiteSolicitado limiteSolicitado,
         DecisaoCredito decisao,
+        Instant registradaEm,
         boolean criacaoNova,
         boolean decidiuAgora) {
 
@@ -45,5 +47,6 @@ public record ResultadoSubmissao(
         Objects.requireNonNull(limiteChequeEspecialVigente, "limiteChequeEspecialVigente e obrigatorio");
         Objects.requireNonNull(limiteSolicitado, "limiteSolicitado e obrigatorio");
         Objects.requireNonNull(decisao, "decisao e obrigatoria");
+        Objects.requireNonNull(registradaEm, "registradaEm e obrigatorio");
     }
 }

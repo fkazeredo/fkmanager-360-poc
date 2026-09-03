@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * S2 (ADR-0018): {@code EntregarInstrucoesEfetivacao} com fakes comportamentais -- sem Spring, sem
  * Postgres. O fake de {@link EntregasEfetivacaoPort} modela UMA linha de {@code outbox_entrega}
  * em memoria com a MESMA regra de fencing (claimId + status PENDENTE) que
- * {@code JpaEntregasEfetivacaoAdapter} implementa contra PostgreSQL real (provado em S3); aqui a
+ * {@code JdbcEntregasEfetivacaoAdapter} implementa contra PostgreSQL real (provado em S3); aqui a
  * concorrencia real nao esta em jogo -- o que se prova e a orquestracao do caso de uso diante de
  * cada uma das quatro classes da ACL, incluindo o descarte por fencing (plano #0004, secao 10).
  */

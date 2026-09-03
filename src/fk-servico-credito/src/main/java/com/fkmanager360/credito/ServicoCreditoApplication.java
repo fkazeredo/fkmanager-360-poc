@@ -118,7 +118,7 @@ public class ServicoCreditoApplication {
     /**
      * Caso de uso UNICO de conclusao da efetivacao (ADR-0009; #0004, Objetivo) -- ver Javadoc de
      * {@link RegistrarResultadoEfetivacao}. Hoje o unico chamador e
-     * {@code JpaEntregasEfetivacaoAdapter#concluirComFalhaDefinitiva}; #0005/#0006 acrescentam
+     * {@code JdbcEntregasEfetivacaoAdapter#concluirComFalhaDefinitiva}; #0005/#0006 acrescentam
      * outras entradas para o MESMO bean, nunca uma segunda implementacao da regra.
      */
     @Bean

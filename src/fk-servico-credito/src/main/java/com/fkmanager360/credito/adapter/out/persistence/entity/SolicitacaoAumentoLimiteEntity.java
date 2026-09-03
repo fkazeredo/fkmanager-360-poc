@@ -114,6 +114,7 @@ public class SolicitacaoAumentoLimiteEntity {
                 StatusSolicitacaoAumentoLimite.valueOf(status),
                 contexto.toDomain(),
                 new ContaId(contaId),
-                new CorrelationId(correlationId));
+                new CorrelationId(correlationId),
+                registradaEm);
     }
 }

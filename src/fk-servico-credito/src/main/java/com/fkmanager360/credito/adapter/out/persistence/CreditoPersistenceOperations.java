@@ -165,7 +165,7 @@ public class CreditoPersistenceOperations {
 
             // #0004: a entrega nasce PENDENTE atomicamente com a intencao, no MESMO commit de TX2
             // (plano #0004, secao 3). outbox_entrega nao tem entity JPA propria -- ninguem mais
-            // insere nesta tabela, so o dispatcher faz UPDATE sob lock (JpaEntregasEfetivacaoAdapter,
+            // insere nesta tabela, so o dispatcher faz UPDATE sob lock (JdbcEntregasEfetivacaoAdapter,
             // mesma justificativa de raw SQL do FOR UPDATE NOWAIT abaixo, ADR-0023).
             jdbcClient.sql("""
                     insert into outbox_entrega (message_id, status_entrega, tentativas, proxima_tentativa_em, atualizado_em)

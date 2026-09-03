@@ -1,6 +1,7 @@
 package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore;
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code test}, nunca faz parte da interface que uma ACL real conheceria. Cobre apenas os dois
  * cenarios que os testes deste ticket exigem: aceite perdido (recuperavel pelo reenvio, AC11) e
  * indisponibilidade transitoria (AC28). Consulta de status/reconciliacao pertence a #0006.
+ *
+ * <p>{@code @Hidden}: fora do OpenAPI gerado pela mesma razao -- o contrato funcional
+ * ({@code openapi.yaml}, ADR-0019) descreve a interface do CoreLegado simulado, e o control plane
+ * nao e capacidade do CoreLegado.
  */
+@Hidden
 @RestController
 @RequestMapping("/control-plane/efetivacoes")
 @RequiredArgsConstructor

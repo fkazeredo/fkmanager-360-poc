@@ -64,6 +64,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
                 "credito.security.expected-audience=" + JwtDecoderTestConfig.EXPECTED_AUDIENCE,
+                // application.yml nao tem mais default para o client-secret (fail-fast, ADR-0014).
+                "AUTH_SERVER_CREDITO_CLIENT_SECRET=segredo-de-teste",
                 // S6 nao exercita persistencia (isso e S3, com Testcontainers): sem esta exclusao,
                 // a autoconfiguracao do DataSource tentaria abrir uma conexao real na
                 // inicializacao do contexto, a partir de #0003 (mesmo padrao ja estabelecido em
@@ -138,7 +140,7 @@ class CreditoSegurancaTest {
     private CreditoPersistenceOperations creditoPersistenceOperations;
 
     // #0004: mesma razao das duas portas acima -- sem mocka-las, o component scan instanciaria
-    // JpaEntregasEfetivacaoAdapter/JpaResultadoEfetivacaoAdapter (via o bean
+    // JdbcEntregasEfetivacaoAdapter/JpaResultadoEfetivacaoAdapter (via o bean
     // EntregarInstrucoesEfetivacao, que os exige no construtor), exigindo JdbcClient/EntityManager
     // que este contexto nao tem.
     @MockitoBean

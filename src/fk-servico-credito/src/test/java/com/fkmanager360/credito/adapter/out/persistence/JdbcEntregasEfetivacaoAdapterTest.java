@@ -75,7 +75,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * dispatcher encontraria apos TX2 de #0003.
  */
 @Testcontainers
-class JpaEntregasEfetivacaoAdapterTest {
+class JdbcEntregasEfetivacaoAdapterTest {
 
     private static final String MIGRATOR_USER = "credito_migrator";
     private static final String MIGRATOR_PASSWORD = "migrator-teste-nao-usar-em-producao";
@@ -207,7 +207,7 @@ class JpaEntregasEfetivacaoAdapterTest {
     @org.springframework.context.annotation.Configuration
     @EnableTransactionManagement
     @EnableJpaRepositories(basePackageClasses = SolicitacaoAumentoLimiteRepository.class)
-    @ComponentScan(basePackageClasses = JpaEntregasEfetivacaoAdapter.class)
+    @ComponentScan(basePackageClasses = JdbcEntregasEfetivacaoAdapter.class)
     static class JpaTestConfig {
 
         @Bean

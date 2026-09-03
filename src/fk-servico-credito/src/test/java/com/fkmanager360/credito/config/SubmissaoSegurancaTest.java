@@ -98,6 +98,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
                 "credito.security.expected-audience=" + JwtDecoderTestConfig.EXPECTED_AUDIENCE,
+                // application.yml nao tem mais default para o client-secret (fail-fast, ADR-0014).
+                "AUTH_SERVER_CREDITO_CLIENT_SECRET=segredo-de-teste",
                 "spring.flyway.enabled=false",
                 "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
                         + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration",
@@ -212,7 +214,7 @@ class SubmissaoSegurancaTest {
 
         when(solicitacoesAumentoLimitePort.carregarParaDecisao(any())).thenAnswer(invocation ->
                 new CargaParaDecisao(StatusSolicitacaoAumentoLimite.SOLICITADA, contextoCapturado.get(),
-                        CONTA_ID, new CorrelationId(UUID.randomUUID())));
+                        CONTA_ID, new CorrelationId(UUID.randomUUID()), Instant.parse("2026-09-03T10:00:00Z")));
 
         // TX2 (mock): aplica de fato a decisao calculada pelo MotorDecisaoCredito real -- este
         // teste nao reimplementa a politica, so traduz resultado -> status, como o adapter real faria.
@@ -285,7 +287,7 @@ class SubmissaoSegurancaTest {
         // sondagem do Mockito), lancando NPE antes mesmo do novo stub ser vinculado. doReturn evita
         // essa sondagem.
         doReturn(new CargaParaDecisao(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO,
-                        contextoAprovado(), CONTA_ID, new CorrelationId(UUID.randomUUID())))
+                        contextoAprovado(), CONTA_ID, new CorrelationId(UUID.randomUUID()), Instant.parse("2026-09-03T10:00:00Z")))
                 .when(solicitacoesAumentoLimitePort).carregarParaDecisao(SOLICITACAO_ID_PADRAO);
         doReturn(new ResultadoAplicacaoDecisao(false, StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO,
                         decisaoAprovada()))
@@ -641,7 +643,7 @@ class SubmissaoSegurancaTest {
         // reescrever via when(mock.metodo(matchers)) executaria o thenAnswer padrao do @BeforeEach
         // durante o proprio setup.
         doReturn(new CargaParaDecisao(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO,
-                        contextoAprovado(), CONTA_ID, new CorrelationId(UUID.randomUUID())))
+                        contextoAprovado(), CONTA_ID, new CorrelationId(UUID.randomUUID()), Instant.parse("2026-09-03T10:00:00Z")))
                 .when(solicitacoesAumentoLimitePort).carregarParaDecisao(SOLICITACAO_ID_PADRAO);
         doReturn(new ResultadoAplicacaoDecisao(false, StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO,
                         decisaoAprovada()))
@@ -683,7 +685,7 @@ class SubmissaoSegurancaTest {
         // esta persistido, sem reescrever nada.
         AtomicBoolean jaDecidiu = new AtomicBoolean(false);
         doReturn(new CargaParaDecisao(StatusSolicitacaoAumentoLimite.SOLICITADA,
-                        contextoAprovado(), CONTA_ID, new CorrelationId(UUID.randomUUID())))
+                        contextoAprovado(), CONTA_ID, new CorrelationId(UUID.randomUUID()), Instant.parse("2026-09-03T10:00:00Z")))
                 .when(solicitacoesAumentoLimitePort).carregarParaDecisao(SOLICITACAO_ID_PADRAO);
         doAnswer(invocacao -> new ResultadoAplicacaoDecisao(
                         jaDecidiu.compareAndSet(false, true),

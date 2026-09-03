@@ -5,9 +5,16 @@ import com.fkmanager360.simuladorcorelegado.domain.ContasLegadoStore;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.DecisaoDeTransporte;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.RegistroEfetivacao;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,11 +32,42 @@ import java.util.Optional;
  */
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "conta-legado", description = "Consulta de contas de um Cliente e dos dados de credito de uma conta.")
 public class EfetivacaoLegadoController {
 
     private final EfetivacoesLegadoStore store;
     private final ContasLegadoStore contasStore;
 
+    @Operation(
+            operationId = "efetivarLimiteLegado",
+            summary = "Recepcao da instrucao de efetivacao do LimiteChequeEspecial, com deduplicacao por idEft",
+            description = "idEft e idCor carregam UUID por extenso -- identidade de negocio, nao formato "
+                    + "host-centric numerico. A MESMA instrucao reenviada (mesmo idEft, mesmo payload) nunca "
+                    + "aplica a alteracao duas vezes e devolve o MESMO numPrt; o mesmo idEft com payload "
+                    + "diferente e sempre rejeitado explicitamente (codRet 207), nunca tratado como operacao "
+                    + "nova. Esta operacao NAO aplica a alteracao no limite consultado por "
+                    + "/legado/contas/consulta-credito -- confirmacao e callback pertencem a #0005; consulta "
+                    + "de status por protocolo/idEft a #0006.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200",
+                    description = "Requisicao processada -- aceite, uma das quatro classes de falha "
+                            + "definitiva, ou indisponibilidade de negocio conhecida (codRet 998) chegam aqui "
+                            + "dentro do 200 (ADR-0005). Este simulador especificamente nunca emite 998 (seus "
+                            + "cenarios de control-plane modelam indisponibilidade como HTTP 5xx real) -- o "
+                            + "codigo existe no contrato e na ACL porque a taxonomia da operacao o preve como "
+                            + "resposta de negocio valida vinda do host, verificado contra WireMock (S4), nao "
+                            + "contra este simulador (S5).",
+                    content = @Content(schema = @Schema(implementation = EfetivacaoLegadoResponse.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "Campo obrigatorio ausente ou fora do formato esperado.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "503",
+                    description = "Indisponibilidade transitoria simulada pelo control plane de cenarios "
+                            + "(ADR-0018, perfis local/demo/test) -- sem corpo. No cenario perder-aceite, o "
+                            + "aceite E registrado antes do 503: o reenvio do mesmo idEft recupera o mesmo "
+                            + "numPrt (AC11).",
+                    content = @Content),
+    })
     @PostMapping(path = "/legado/efetivacoes")
     public ResponseEntity<EfetivacaoLegadoResponse> efetivar(@Valid @RequestBody EfetivacaoLegadoRequest requisicao) {
         // Dedup por idEft PRECEDE o consumo do cenario de control-plane, nao o contrario: um

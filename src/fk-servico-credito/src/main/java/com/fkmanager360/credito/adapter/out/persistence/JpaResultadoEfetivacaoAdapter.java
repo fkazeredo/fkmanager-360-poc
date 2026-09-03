@@ -29,7 +29,7 @@ import java.time.Instant;
  * exaustivamente testado em S1 desde #0003 -- nenhuma segunda tabela de transicoes.
  *
  * <p>Chamada tanto de dentro da transacao ja aberta por
- * {@code JpaEntregasEfetivacaoAdapter#concluirComFalhaDefinitiva} (#0004, via propagacao
+ * {@code JdbcEntregasEfetivacaoAdapter#concluirComFalhaDefinitiva} (#0004, via propagacao
  * {@code REQUIRED} padrao) quanto, no futuro, standalone pelo callback (#0005) e pela
  * reconciliacao (#0006) -- nenhuma delas duplica esta porta.
  */

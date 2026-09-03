@@ -1,4 +1,4 @@
-package com.fkmanager360.carteiraclientes.application.usecase;
+package com.fkmanager360.carteiraclientes.application.port.out;
 
 /**
  * A conta pedida nao esta entre as contas que o CoreLegado reconhece para aquele Cliente. A

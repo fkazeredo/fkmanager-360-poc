@@ -57,15 +57,12 @@ record SolicitacaoAumentoLimiteResponse(
     }
 
     /**
-     * {@code registradaEm}: nem {@link ResultadoSubmissao} nem os casos de uso devolvem o instante
-     * de registro da solicitacao diretamente hoje -- o record carrega os fatos de decisao, nao o
-     * timestamp de criacao da linha. O controller usa o mesmo {@code Instant} que ele proprio
-     * passou a {@code registrarSolicitacaoAumentoLimite.executar(comando, agora)} como aproximacao
-     * aceitavel para este ticket: e o mesmo instante logico da requisicao, e num replay o valor
-     * apresentado e o do momento da releitura, nao o do registro original -- suficiente para #0003,
-     * que nao expoe consulta/listagem de solicitacoes (isso e #0007).
+     * {@code registradaEm} vem do proprio {@link ResultadoSubmissao} -- o instante de registro
+     * persistido em TX1 -- entao um replay idempotente apresenta o MESMO valor do registro
+     * original (spec: "replay: mesma solicitacaoId, mesmo resultado"), nunca o instante da
+     * releitura.
      */
-    static SolicitacaoAumentoLimiteResponse de(ResultadoSubmissao resultado, Instant registradaEm) {
+    static SolicitacaoAumentoLimiteResponse de(ResultadoSubmissao resultado) {
         Long pendente = resultado.status() == StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO
                 ? resultado.limiteSolicitado().centavos()
                 : null;
@@ -78,6 +75,6 @@ record SolicitacaoAumentoLimiteResponse(
                 resultado.limiteSolicitado().centavos(),
                 pendente,
                 DecisaoResponse.de(resultado.decisao()),
-                registradaEm);
+                resultado.registradaEm());
     }
 }

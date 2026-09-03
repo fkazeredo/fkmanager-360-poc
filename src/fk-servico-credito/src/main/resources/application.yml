@@ -43,7 +43,7 @@ spring:
           carteira-clientes-exchange:
             provider: servidor-autorizacao
             client-id: ${AUTH_SERVER_CREDITO_CLIENT_ID:servico-credito}
-            client-secret: ${AUTH_SERVER_CREDITO_CLIENT_SECRET:troque-este-client-secret}
+            client-secret: ${AUTH_SERVER_CREDITO_CLIENT_SECRET}
             authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
             scope: carteira.leitura
         provider:

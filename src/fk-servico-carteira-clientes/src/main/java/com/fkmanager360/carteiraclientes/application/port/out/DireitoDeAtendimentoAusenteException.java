@@ -1,4 +1,4 @@
-package com.fkmanager360.carteiraclientes.application.usecase;
+package com.fkmanager360.carteiraclientes.application.port.out;
 
 /**
  * O ator autenticado nao tem direito de atendimento <b>atual</b> sobre aquele Cliente. A borda

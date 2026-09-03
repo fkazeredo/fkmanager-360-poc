@@ -1,7 +1,9 @@
 package com.fkmanager360.carteiraclientes.application.usecase;
 
 import com.fkmanager360.carteiraclientes.application.port.out.CoreLegadoUnavailableException;
+import com.fkmanager360.carteiraclientes.application.port.out.ContaNaoEncontradaException;
 import com.fkmanager360.carteiraclientes.application.port.out.ContasClientePort;
+import com.fkmanager360.carteiraclientes.application.port.out.DireitoDeAtendimentoAusenteException;
 import com.fkmanager360.carteiraclientes.application.port.out.DadosMestresClientePort;
 import com.fkmanager360.carteiraclientes.application.port.out.VinculosCarteiraPort;
 import com.fkmanager360.carteiraclientes.domain.ClienteId;
