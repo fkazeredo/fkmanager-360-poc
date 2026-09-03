@@ -19,6 +19,15 @@ spring:
     url: ${CREDITO_DB_JDBC_URL}
     user: ${CREDITO_DB_MIGRATOR_USER}
     password: ${CREDITO_DB_MIGRATOR_PASSWORD}
+  jpa:
+    hibernate:
+      # Flyway continua soberano sobre o schema (ADR-0014): validate so confere o mapeamento
+      # contra o schema ja migrado, nunca create/altera nada. Hibernate usa spring.datasource.*
+      # (credencial app), nunca spring.flyway.* (credencial migrator).
+      ddl-auto: validate
+    # Sem lazy loading acidental fora da transacao -- a entity so e acessada dentro do escopo do
+    # adapter/fragment transacional, e o open session in view esconderia esse limite.
+    open-in-view: false
   security:
     oauth2:
       # Resource Server: valida os tokens que chegam.

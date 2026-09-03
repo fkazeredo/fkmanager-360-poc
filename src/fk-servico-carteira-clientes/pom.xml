@@ -50,9 +50,14 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Substitui spring-boot-starter-jdbc (removido): este modulo passou a usar Spring Data
+             JPA para persistencia (adapter/out/persistence/**), e o starter de JPA ja traz
+             spring-jdbc transitivamente, entao a dependencia explicita de JDBC puro deixou de ter
+             razao de existir aqui, dado que o unico adapter de persistencia do modulo nao usa
+             mais JdbcClient. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -88,6 +93,15 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <!-- Lombok vive so em adapter/** e config/** (lombok.config na raiz); domain/** e
+             application/** continuam Java puro, sem processador de anotacao (ADR-0020). Sem
+             <version>: o BOM do Spring Boot 4.1.1 ja gerencia 1.18.46, a mesma versao que
+             annotationProcessorPaths (pom raiz) fixa para o compiler plugin. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Testes: Spring Boot 4 fatiou spring-boot-starter-test em starters por slice. -->

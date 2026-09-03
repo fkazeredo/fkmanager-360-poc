@@ -68,12 +68,7 @@
         <!-- credito_db nasce neste ticket (#0003, ADR-0010, ADR-0014): primeiro comportamento com
              estado duravel de Credito. Migracao embutida (ADR-0014, emenda 2026-09-02): Flyway
              roda no boot com spring.flyway.* (credencial migrator, DDL), independente do
-             DataSource de spring.datasource.* (credencial app, DML) que o JdbcClient usa - mesmo
-             padrao ja em producao em fk-servico-carteira-clientes. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
-        </dependency>
+             DataSource de spring.datasource.* (credencial app, DML). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-flyway</artifactId>
@@ -81,6 +76,31 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <!-- Spring Data JPA/Hibernate e o padrao de persistencia deste modulo a partir deste
+             refactor (adapter/out/persistence/**). MANTIDO junto com spring-boot-starter-jdbc
+             logo abaixo: TX2 continua usando JdbcClient nativo so para o SELECT ... FOR UPDATE
+             NOWAIT (ver Javadoc de CreditoPersistenceOperations) - as duas tecnologias
+             compartilham a mesma transacao/DataSource. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- Exceção justificada (nao superseded pelo starter de JPA acima, ao contrario de
+             carteira-clientes): o lock nativo de TX2 (FOR UPDATE NOWAIT) usa JdbcClient
+             diretamente, dentro da mesma transacao que o Hibernate compartilha. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <!-- Lombok vive so em adapter/** e config/** (lombok.config na raiz) - domain/** e
+             application/** continuam Java puro, sem processador de anotacao (ADR-0020). Sem
+             <version>: o BOM do Spring Boot 4.1.1 ja gerencia 1.18.46, a mesma versao que
+             annotationProcessorPaths (pom raiz) fixa para o compiler plugin. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
         <!-- Escopo compile (nao runtime, ao contrario de carteira-clientes): o guardrail de
              concorrencia do adapter de persistencia (SolicitacoesAumentoLimitePort, plano #0003)

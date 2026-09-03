@@ -1,6 +1,7 @@
 package com.fkmanager360.credito.config;
 
 import com.fkmanager360.credito.application.FingerprintCanonico;
+import com.fkmanager360.credito.adapter.out.persistence.CreditoPersistenceOperations;
 import com.fkmanager360.credito.application.port.out.CargaParaDecisao;
 import com.fkmanager360.credito.application.port.out.IdempotenciaEmProcessamentoException;
 import com.fkmanager360.credito.application.port.out.NovaSolicitacaoAumentoLimite;
@@ -146,6 +147,15 @@ class SubmissaoSegurancaTest {
 
     @MockitoBean
     private RegistroIdempotenciaPort registroIdempotenciaPort;
+
+    // CreditoPersistenceOperations e o fragment transacional de TX1/TX2, e nao implementa nenhuma
+    // port -- entao mockar as duas portas acima nao o substitui, e o component scan o instanciaria
+    // avidamente exigindo o EntityManager que este contexto deliberadamente nao tem. Declarar aqui
+    // que este teste tambem nao exercita esse bean e a forma correta: a exclusao pertence ao teste
+    // que escolheu subir sem banco, nunca a producao (a alternativa seria um @Lazy no bean real,
+    // isto e, uma anotacao de producao cuja unica justificativa seria este arquivo).
+    @MockitoBean
+    private CreditoPersistenceOperations creditoPersistenceOperations;
 
     /** Preenchido pelo stub padrao de {@code registrar(...)}, reaproveitado por quem precisar do contexto congelado. */
     private final AtomicReference<ContextoDecisaoCredito> contextoCapturado = new AtomicReference<>();

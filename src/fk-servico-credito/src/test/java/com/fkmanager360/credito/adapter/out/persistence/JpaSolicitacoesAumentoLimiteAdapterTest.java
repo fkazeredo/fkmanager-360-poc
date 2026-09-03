@@ -1,5 +1,12 @@
 package com.fkmanager360.credito.adapter.out.persistence;
 
+import com.fkmanager360.credito.adapter.out.persistence.entity.ContextoDecisaoCreditoEntity;
+import com.fkmanager360.credito.adapter.out.persistence.entity.DecisaoCreditoEntity;
+import com.fkmanager360.credito.adapter.out.persistence.entity.HistoricoSolicitacaoEntity;
+import com.fkmanager360.credito.adapter.out.persistence.entity.OutboxMensagemEntity;
+import com.fkmanager360.credito.adapter.out.persistence.entity.RegistroIdempotenciaEntity;
+import com.fkmanager360.credito.adapter.out.persistence.entity.SolicitacaoAumentoLimiteEntity;
+import com.fkmanager360.credito.adapter.out.persistence.repository.SolicitacaoAumentoLimiteRepository;
 import com.fkmanager360.credito.application.port.out.CargaParaDecisao;
 import com.fkmanager360.credito.application.port.out.EntradaHistorico;
 import com.fkmanager360.credito.application.port.out.IdempotenciaEmProcessamentoException;
@@ -11,6 +18,7 @@ import com.fkmanager360.credito.application.port.out.ResultadoRegistroSolicitaca
 import com.fkmanager360.credito.application.port.out.SolicitacaoCriada;
 import com.fkmanager360.credito.application.port.out.SolicitacaoNaoEncontradaException;
 import com.fkmanager360.credito.application.port.out.SolicitacaoNaoTerminalExistente;
+import com.fkmanager360.credito.application.port.out.SolicitacoesAumentoLimitePort;
 import com.fkmanager360.credito.application.port.out.TipoFatoHistorico;
 import com.fkmanager360.credito.domain.AtorId;
 import com.fkmanager360.credito.domain.AtorSistema;
@@ -36,13 +44,23 @@ import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
 import com.fkmanager360.credito.domain.VersaoPoliticaCredito;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import jakarta.persistence.EntityManagerFactory;
 import org.flywaydb.core.Flyway;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.AvailableSettings;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.orm.jpa.JpaTransactionManager;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -88,9 +106,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * e {@link #adapter}, usado por TODOS os testes funcionais abaixo, roda exclusivamente com
  * {@code credito_app} -- os testes de unicidade, idempotencia e atomicidade ja rodam sob o
  * privilegio real de producao, nao sob um superusuario que mascararia um problema de GRANT.
+ *
+ * <p><b>Diferenca em relacao ao teste anterior ao refactor JPA</b>: {@link #adapter} agora e
+ * obtido de um {@link AnnotationConfigApplicationContext} minimo ({@link #construirContexto}), nao
+ * instanciado diretamente com {@code new}. Isso e necessario -- nao cosmetico -- porque
+ * {@link CreditoPersistenceOperations#registrarTx1} e
+ * {@link CreditoPersistenceOperations#aplicarDecisaoTx2} sao {@code @Transactional} declarativo:
+ * sem um proxy AOP de verdade por tras, a anotacao nao faz nada, e as escritas rodariam sem a
+ * demarcacao transacional que os testes de concorrencia abaixo dependem. O contexto e
+ * propositalmente minimo -- so DataSource, {@code EntityManagerFactory}, {@code JpaTransactionManager}
+ * e os beans deste pacote -- sem tocar seguranca, web ou ACLs do resto do modulo.
+ *
+ * <p>{@link #adapter} e obtido pelo TIPO DA PORT ({@link SolicitacoesAumentoLimitePort}), nao pelo
+ * tipo concreto do adapter: {@link CreditoPersistenceOperations} sendo {@code @Repository} ativa
+ * {@code PersistenceExceptionTranslationPostProcessor}, que envolve os beans anotados num proxy AOP
+ * -- como {@code JpaSolicitacoesAumentoLimiteAdapter} implementa uma interface, esse proxy e um JDK
+ * dynamic proxy da PORT, nao uma subclasse CGLIB da classe concreta, entao
+ * {@code getBean(JpaSolicitacoesAumentoLimiteAdapter.class)} nao encontraria nada.
  */
 @Testcontainers
-class PostgresSolicitacoesAumentoLimiteAdapterTest {
+class JpaSolicitacoesAumentoLimiteAdapterTest {
 
     private static final String MIGRATOR_USER = "credito_migrator";
     private static final String MIGRATOR_PASSWORD = "migrator-teste-nao-usar-em-producao";
@@ -107,8 +142,8 @@ class PostgresSolicitacoesAumentoLimiteAdapterTest {
     private static String creditoJdbcUrl;
     private static HikariDataSource appDataSource;
     private static JdbcClient appJdbcClient;
-    private static PostgresRegistroIdempotenciaAdapter registroIdempotenciaAdapter;
-    private static PostgresSolicitacoesAumentoLimiteAdapter adapter;
+    private static AnnotationConfigApplicationContext applicationContext;
+    private static SolicitacoesAumentoLimitePort adapter;
 
     private static long contaSequencial = 9_100_000_000L;
 
@@ -153,16 +188,70 @@ class PostgresSolicitacoesAumentoLimiteAdapterTest {
         config.setPassword(APP_PASSWORD);
         config.setMaximumPoolSize(10);
         appDataSource = new HikariDataSource(config);
-
         appJdbcClient = JdbcClient.create(appDataSource);
-        registroIdempotenciaAdapter = new PostgresRegistroIdempotenciaAdapter(appJdbcClient);
-        adapter = new PostgresSolicitacoesAumentoLimiteAdapter(
-                appJdbcClient, new DataSourceTransactionManager(appDataSource), registroIdempotenciaAdapter);
+
+        applicationContext = construirContexto(appDataSource);
+        adapter = applicationContext.getBean(SolicitacoesAumentoLimitePort.class);
     }
 
     @AfterAll
-    static void fecharDataSource() {
+    static void fecharRecursos() {
+        applicationContext.close();
         appDataSource.close();
+    }
+
+    /**
+     * Monta um contexto Spring minimo -- DataSource, {@code EntityManagerFactory} Hibernate,
+     * {@code JpaTransactionManager}, os cinco repositories deste pacote
+     * ({@code @EnableJpaRepositories}) e os dois adapters mais {@link CreditoPersistenceOperations}
+     * ({@code @ComponentScan} restrito ao pacote de persistencia) -- o suficiente para exercitar
+     * {@code @Transactional} de verdade sem subir seguranca, web ou ACLs do resto do modulo.
+     * Chamado duas vezes nesta suite: uma para {@link #appDataSource}, outra (dentro do teste de
+     * {@code FOR UPDATE NOWAIT}) para o {@link DataSource} decorado com atraso.
+     */
+    private static AnnotationConfigApplicationContext construirContexto(DataSource dataSource) {
+        AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext();
+        ctx.getBeanFactory().registerSingleton("dataSource", dataSource);
+        ctx.register(JpaTestConfig.class);
+        ctx.refresh();
+        return ctx;
+    }
+
+    @org.springframework.context.annotation.Configuration
+    @EnableTransactionManagement
+    @EnableJpaRepositories(basePackageClasses = SolicitacaoAumentoLimiteRepository.class)
+    @ComponentScan(basePackageClasses = CreditoPersistenceOperations.class)
+    static class JpaTestConfig {
+
+        @Bean
+        LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource dataSource) {
+            LocalContainerEntityManagerFactoryBean emf = new LocalContainerEntityManagerFactoryBean();
+            emf.setDataSource(dataSource);
+            emf.setPackagesToScan("com.fkmanager360.credito.adapter.out.persistence.entity");
+            emf.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
+            emf.setJpaPropertyMap(Map.of(AvailableSettings.HBM2DDL_AUTO, "validate"));
+            return emf;
+        }
+
+        @Bean
+        JpaTransactionManager transactionManager(EntityManagerFactory entityManagerFactory) {
+            return new JpaTransactionManager(entityManagerFactory);
+        }
+
+        @Bean
+        JdbcClient jdbcClient(DataSource dataSource) {
+            return JdbcClient.create(dataSource);
+        }
+
+        // Producao ganha isto de graca via a autoconfiguracao completa do Spring Boot
+        // (spring-boot-autoconfigure registra este post-processor sempre que ha JPA no
+        // classpath); este contexto minimo de teste precisa declara-lo explicitamente para que
+        // @Repository (CreditoPersistenceOperations, os dois adapters) traduza excecoes de
+        // persistencia para org.springframework.dao.DataIntegrityViolationException.
+        @Bean
+        static org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor persistenceExceptionTranslationPostProcessor() {
+            return new org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor();
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -595,7 +684,8 @@ class PostgresSolicitacoesAumentoLimiteAdapterTest {
     /**
      * Duas transacoes reais disputando o lock exclusivo de {@code aplicarDecisao} sobre a MESMA
      * solicitacao. Para que a segunda genuinamente encontre o lock ocupado (e nao apenas vença uma
-     * corrida de sorte), a primeira roda atraves de um {@link DataSource} decorado que, de forma
+     * corrida de sorte), a primeira roda atraves de um contexto Spring INDEPENDENTE
+     * ({@link #construirContexto}) montado sobre um {@link DataSource} decorado que, de forma
      * ortogonal ao codigo de producao, insere um pequeno atraso IMEDIATAMENTE apos o
      * {@code SELECT ... FOR UPDATE NOWAIT} ter adquirido o lock -- e so libera a segunda thread
      * (via {@link CountDownLatch}) depois de confirmar que o lock ja foi de fato adquirido.
@@ -609,11 +699,11 @@ class PostgresSolicitacoesAumentoLimiteAdapterTest {
 
         CountDownLatch lockAdquirido = new CountDownLatch(1);
         DataSource dataSourceLenta = comAtrasoAposForUpdateNowait(appDataSource, lockAdquirido, 500);
-        var adapterLento = new PostgresSolicitacoesAumentoLimiteAdapter(
-                JdbcClient.create(dataSourceLenta), new DataSourceTransactionManager(dataSourceLenta), registroIdempotenciaAdapter);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
-        try {
+        try (AnnotationConfigApplicationContext contextoLento = construirContexto(dataSourceLenta)) {
+            SolicitacoesAumentoLimitePort adapterLento = contextoLento.getBean(SolicitacoesAumentoLimitePort.class);
+
             Future<ResultadoAplicacaoDecisao> futuroLento = executor.submit(() -> adapterLento.aplicarDecisao(
                     id, decisaoAprovada(decididaEm), intencaoPara(contaId, correlationId), entradaDecisao(id, decididaEm)));
 
@@ -633,6 +723,42 @@ class PostgresSolicitacoesAumentoLimiteAdapterTest {
         }
 
         assertThat(contarPor("decisao_credito", "solicitacao_id", id.valor())).isEqualTo(1L);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Mapeamento JPA x schema migrado.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * A prova de que o mapeamento das 6 entities bate com a migration: um {@link SessionFactory}
+     * efemero, dedicado so a esta asserção, sob a credencial de app. Se qualquer
+     * {@code @Column}/{@code @Table}/{@code @OneToOne} das entities divergisse do que
+     * {@code V1__criar_estado_duravel_de_credito.sql} de fato criou -- em particular
+     * {@code CHAR(64)} de {@code fingerprint}, os {@code uuid}, os {@code timestamptz} e a coluna
+     * {@code GENERATED ALWAYS AS IDENTITY} de {@code historico_solicitacao.id} --
+     * {@code buildSessionFactory()} abaixo lancaria {@code SchemaManagementException} e este teste
+     * falharia, exatamente o que {@code ddl-auto=validate} promete em producao (application.yml).
+     */
+    @Test
+    void hibernateDdlAutoValidate_passaComACredencialDeApp_contraOSchemaJaMigrado() {
+        try (SessionFactory sessionFactoryEfemero = construirSessionFactoryEfemera(APP_USER, APP_PASSWORD)) {
+            assertThat(sessionFactoryEfemero.isOpen()).isTrue();
+        }
+    }
+
+    private static SessionFactory construirSessionFactoryEfemera(String usuario, String senha) {
+        return new org.hibernate.cfg.Configuration()
+                .addAnnotatedClass(SolicitacaoAumentoLimiteEntity.class)
+                .addAnnotatedClass(ContextoDecisaoCreditoEntity.class)
+                .addAnnotatedClass(DecisaoCreditoEntity.class)
+                .addAnnotatedClass(RegistroIdempotenciaEntity.class)
+                .addAnnotatedClass(OutboxMensagemEntity.class)
+                .addAnnotatedClass(HistoricoSolicitacaoEntity.class)
+                .setProperty(AvailableSettings.JAKARTA_JDBC_URL, creditoJdbcUrl)
+                .setProperty(AvailableSettings.JAKARTA_JDBC_USER, usuario)
+                .setProperty(AvailableSettings.JAKARTA_JDBC_PASSWORD, senha)
+                .setProperty(AvailableSettings.HBM2DDL_AUTO, "validate")
+                .buildSessionFactory();
     }
 
     // ---------------------------------------------------------------------------------------

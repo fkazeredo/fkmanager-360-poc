@@ -9,6 +9,7 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMembers;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 /**
@@ -38,10 +39,34 @@ class ArchitectureTest {
             noClasses().that().resideInAPackage("..application..")
                     .should().dependOnClassesThat().resideInAnyPackage("org.springframework..");
 
+    /**
+     * A partir do refactor para Spring Data JPA, a guarda deixa de ser "JPA nao existe neste
+     * modulo" (contradiria a decisao do Owner de adotar JPA como padrao de persistencia) e passa a
+     * provar, estruturalmente, ONDE JPA pode viver: nunca dentro do hexagono
+     * ({@link #dominio_e_aplicacao_nao_dependem_de_persistencia}), e somente dentro de
+     * {@code adapter.out.persistence} ({@link #jpa_somente_na_persistencia}).
+     */
     @ArchTest
-    static final ArchRule nenhuma_classe_deste_servico_usa_jpa_ou_hibernate =
-            noClasses().should().dependOnClassesThat()
-                    .resideInAnyPackage("jakarta.persistence..", "org.hibernate..");
+    static final ArchRule dominio_e_aplicacao_nao_dependem_de_persistencia =
+            noClasses().that().resideInAnyPackage("..domain..", "..application..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "jakarta.persistence..", "org.hibernate..", "org.springframework.data..");
+
+    @ArchTest
+    static final ArchRule jpa_somente_na_persistencia =
+            noClasses().that().resideOutsideOfPackage("..adapter.out.persistence..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "jakarta.persistence..", "org.hibernate..", "org.springframework.data..");
+
+    /**
+     * Companheira das duas regras acima: a borda web nunca pula a port de aplicacao para falar
+     * direto com um repository Spring Data -- reforca que {@code adapter.in.web} so conhece
+     * {@code application.port.in}/{@code application.usecase}, nunca {@code adapter.out.persistence}.
+     */
+    @ArchTest
+    static final ArchRule web_nao_acessa_repository =
+            noClasses().that().resideInAPackage("..adapter.in.web..")
+                    .should().dependOnClassesThat().resideInAPackage("..adapter.out.persistence..");
 
     /**
      * ADR-0020 e S8 exigem ausencia de JPA, Kafka e Rabbit dentro do dominio -- a mesma frase,
@@ -134,4 +159,20 @@ class ArchitectureTest {
     static final ArchRule dominio_nao_depende_de_micrometer =
             noClasses().that().resideInAPackage("..domain..")
                     .should().dependOnClassesThat().resideInAnyPackage("io.micrometer..");
+
+    /**
+     * Falsifica: um membro gerado por Lombok (marcado com {@code @lombok.Generated}, retencao
+     * CLASS -- {@code lombok.config} na raiz liga {@code addLombokGeneratedAnnotation}) declarado
+     * numa classe de dominio ou aplicacao. Provado empiricamente falsificavel neste modulo:
+     * anotar temporariamente uma classe de {@code application.usecase} com
+     * {@code @RequiredArgsConstructor} e rodar este teste produz vermelho -- ArchUnit le a
+     * anotacao CLASS-retention pelo bytecode via ASM, sem depender de reflection em runtime (que
+     * so enxergaria RUNTIME-retention). A norma "hexagono sem Lombok" continua valendo por
+     * construcao e revisao mesmo fora deste teste; esta regra so a torna tambem verificavel por
+     * bytecode.
+     */
+    @ArchTest
+    static final ArchRule hexagono_nao_usa_lombok =
+            noMembers().that().areDeclaredInClassesThat().resideInAnyPackage("..domain..", "..application..")
+                    .should().beAnnotatedWith("lombok.Generated");
 }
