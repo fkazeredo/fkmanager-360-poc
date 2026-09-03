@@ -2,26 +2,37 @@ openapi: 3.0.3
 info:
   title: fk-servico-credito
   description: >-
-    Resource Server do bounded context Credito, dono semantico do LimiteChequeEspecial. Neste
-    ticket (#0002), expoe a consulta do LimiteChequeEspecialVigente que o CoreLegado reconhece no
-    momento da consulta, lido pela ACL propria deste contexto (ADR-0004). Nasce SEM persistencia:
-    nao ha estado duravel de Credito ainda (ADR-0010, ADR-0014).
+    Resource Server do bounded context Credito, dono semantico do LimiteChequeEspecial. Desde
+    #0002 expoe a consulta do LimiteChequeEspecialVigente que o CoreLegado reconhece no momento da
+    consulta, lido pela ACL propria deste contexto (ADR-0004). A partir de #0003 expoe tambem a
+    submissao da SolicitacaoAumentoLimite com decisao automatica na mesma resposta (User Story
+    33) -- o primeiro comportamento deste servico com estado duravel (credito_db, ADR-0010,
+    ADR-0014).
 
     A verificacao do direito de atendimento em fk-servico-carteira-clientes PRECEDE qualquer
-    acesso ao CoreLegado: sem direito, a resposta e 403 e nenhuma consulta ao Core e emitida
-    (AC23). Para isso este servico atua como OAuth client e troca o token que recebeu por um com
-    aud=servico-carteira-clientes, reduzindo o scope para carteira.leitura (ADR-0015, AC21).
+    acesso ao CoreLegado, em toda operacao por conta: sem direito, a resposta e 403 e nenhuma
+    consulta ao Core e emitida (AC23). Para isso este servico atua como OAuth client e troca o
+    token que recebeu por um com aud=servico-carteira-clientes, reduzindo o scope para
+    carteira.leitura (ADR-0015, AC21).
 
     Nao devolve dados cadastrais do Cliente, que pertencem a CarteiraClientes (AC30), nem a
     ClassificacaoRiscoCreditoBase, que e insumo interno da politica e nunca e apresentada ao
-    GerenteRelacionamento.
-  version: "0002"
+    GerenteRelacionamento (AC3).
+
+    Toda resposta de erro carrega a propriedade `codigo` -- codigo estavel do dominio, nunca frase
+    de interface (plano #0003, "Envelope de erro com codigo estavel"). A UI nunca distingue erro
+    por texto.
+  version: "0003"
 servers:
   - url: http://localhost:8083
     description: Rede interna do Docker Compose (nome de servico), porta exposta localmente para dev.
 tags:
   - name: limite
     description: Leitura do LimiteChequeEspecialVigente reconhecido pelo CoreLegado.
+  - name: solicitacoes
+    description: >-
+      Submissao da SolicitacaoAumentoLimite e decisao automatica (#0003). Nao inclui consulta ou
+      listagem de solicitacoes, que pertencem a #0007.
 paths:
   /clientes/{clienteId}/contas/{contaId}/limite-cheque-especial-vigente:
     get:
@@ -58,7 +69,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/LimiteChequeEspecialVigenteResponse"
         "400":
-          description: Identificador fora do formato esperado.
+          description: "Identificador fora do formato esperado. `codigo = IDENTIFICADOR_INVALIDO`."
           content:
             application/problem+json:
               schema:
@@ -72,6 +83,7 @@ paths:
             Sem direito de atendimento atual sobre o Cliente, conforme fk-servico-carteira-clientes.
             NENHUMA chamada ao CoreLegado e emitida neste caso (AC23). Tambem 403 quando o token
             nao tem o scope credito.leitura ou o papel GERENTE_RELACIONAMENTO.
+            `codigo = SEM_DIREITO_DE_ATENDIMENTO`.
           content:
             application/problem+json:
               schema:
@@ -79,25 +91,163 @@ paths:
         "404":
           description: >-
             A conta nao pertence aquele Cliente, ou o CoreLegado nao a conhece. Nenhuma chamada ao
-            Core acontece no primeiro caso.
+            Core acontece no primeiro caso. `codigo = CONTA_NAO_ENCONTRADA`.
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "502":
-          description: O CoreLegado respondeu algo que a ACL nao sabe interpretar.
+          description: >-
+            O CoreLegado respondeu algo que a ACL nao sabe interpretar.
+            `codigo = DEPENDENCIA_INDISPONIVEL`.
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "503":
-          description: CoreLegado ou fk-servico-carteira-clientes indisponivel.
+          description: >-
+            CoreLegado ou fk-servico-carteira-clientes indisponivel.
+            `codigo = DEPENDENCIA_INDISPONIVEL`.
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "504":
-          description: Timeout ao consultar o CoreLegado.
+          description: >-
+            Timeout ao consultar o CoreLegado. `codigo = DEPENDENCIA_INDISPONIVEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /clientes/{clienteId}/contas/{contaId}/solicitacoes-aumento-limite:
+    post:
+      operationId: submeterSolicitacaoAumentoLimite
+      tags: [solicitacoes]
+      summary: Registra a ManifestacaoCliente e o LimiteSolicitado, devolve a decisao automatica
+      description: >-
+        Fronteira comportamental submissao -> decisao automatica (spec, User Story 33; plano
+        #0003). `clienteId`/`contaId` vem do path -- autoritativos porque a autorizacao em
+        CarteiraClientes ja aconteceu por eles (AC23) -- e o corpo NAO aceita `clienteId`,
+        `contaId` nem `origemSolicitacao`: um payload tentando envia-los e simplesmente ignorado,
+        e `OrigemSolicitacao` e sempre `CLIENTE`, fixada pelo dominio (AC27). O `originadorId` e
+        derivado EXCLUSIVAMENTE do subject (`sub`) do JWT autenticado, nunca do corpo.
+
+        Ordem de avaliacao normativa (spec, "Ordem de avaliacao na submissao"): idempotencia
+        primeiro (sem tocar rede), depois validacoes locais, depois autorizacao de recurso, depois
+        o CoreLegado, com o optimistic check (`limiteVigenteVisto`) precedendo deliberadamente a
+        comparacao com o vigente autoritativo -- visto 5.000 / Core 6.000 / pedido 5.500 e sempre
+        `409`, nunca `422`.
+
+        `201` para toda criacao, INCLUSIVE quando a decisao e `REJEITADA` (a solicitacao foi
+        criada; a rejeicao esta no corpo). `200` para replay idempotente.
+      security:
+        - bearerJwt: [credito.escrita]
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{1,10}$"
+        - name: contaId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{1,10}$"
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: >-
+            Identifica uma tentativa logica de submissao com payload canonico fixo. Escopo de
+            unicidade: originadorId + key. Gerada pelo app-gerente, repassada intacta pelo
+            fk-bff-gerente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitacaoAumentoLimiteRequest"
+      responses:
+        "201":
+          description: >-
+            SolicitacaoAumentoLimite criada agora (independentemente do resultado da decisao).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SolicitacaoAumentoLimiteResponse"
+        "200":
+          description: Replay idempotente -- mesma chave, mesmo fingerprint, operacao ja concluida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SolicitacaoAumentoLimiteResponse"
+        "400":
+          description: >-
+            `IDEMPOTENCY_KEY_AUSENTE` (header ausente), `IDEMPOTENCY_KEY_INVALIDA` (header nao e
+            UUID) ou `COMANDO_ILEGIVEL` (JSON invalido, ou campo numerico estruturalmente
+            incompativel, como `600000.5` em `limiteSolicitado`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: >-
+            Sem token, token expirado, assinatura invalida, issuer incorreto ou audience
+            incorreta.
+        "403":
+          description: "Sem direito de atendimento atual sobre a conta. `codigo = SEM_DIREITO_DE_ATENDIMENTO`."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: "A conta nao e reconhecida pelo CoreLegado. `codigo = CONTA_NAO_ENCONTRADA`."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: >-
+            `LIMITE_VIGENTE_DESATUALIZADO` (limiteVigenteVisto diverge do vigente atual --
+            precede deliberadamente o 422 de "nao aumenta"), `SOLICITACAO_NAO_TERMINAL_EXISTENTE`
+            (ja existe solicitacao nao terminal para a conta), ou
+            `IDEMPOTENCIA_EM_PROCESSAMENTO` (mesma chave sendo processada agora).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: >-
+            `COMANDO_INVALIDO` (validacao local: limiteSolicitado <= 0, canalManifestacao fora do
+            enum, observacao > 500), `LIMITE_SOLICITADO_NAO_AUMENTA` (nao e estritamente maior que
+            o vigente autoritativo) ou `IDEMPOTENCIA_FINGERPRINT_DIVERGENTE` (mesma chave, payload
+            diferente -- operacao original inalterada).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "502":
+          description: >-
+            O CoreLegado respondeu algo que a ACL nao sabe interpretar.
+            `codigo = DEPENDENCIA_INDISPONIVEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: >-
+            CoreLegado ou fk-servico-carteira-clientes indisponivel.
+            `codigo = DEPENDENCIA_INDISPONIVEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "504":
+          description: "Timeout ao consultar o CoreLegado. `codigo = DEPENDENCIA_INDISPONIVEL`."
           content:
             application/problem+json:
               schema:
@@ -110,9 +260,12 @@ components:
       bearerFormat: JWT
       description: >-
         Token emitido por fk-servidor-autorizacao (Token Exchange a partir da sessao do
-        fk-bff-gerente), com aud=servico-credito. Carrega credito.leitura, exigido por esta API, e
-        carteira.leitura, que este servico estreita na troca seguinte contra
-        fk-servico-carteira-clientes -- a cadeia reduz capability, nunca amplia (ADR-0015).
+        fk-bff-gerente), com aud=servico-credito. Least privilege por operacao (plano #0003,
+        secao 9): o GET exige credito.leitura, o POST de submissao exige credito.escrita -- duas
+        registrations distintas no BFF para o mesmo destino, nunca o mesmo token com os dois
+        scopes. Ambos carregam tambem carteira.leitura, que este servico estreita na troca
+        seguinte contra fk-servico-carteira-clientes -- a cadeia reduz capability, nunca amplia
+        (ADR-0015).
   schemas:
     LimiteChequeEspecialVigenteResponse:
       type: object
@@ -136,9 +289,112 @@ components:
             data em que o host atualizou o limite (DAT-ATU-LIM no contrato host-centric), que e
             informacao da fonte sobre a fonte e permanece encapsulada na ACL.
           example: "2026-09-02T16:00:00Z"
+    SolicitacaoAumentoLimiteRequest:
+      type: object
+      required: [limiteSolicitado, limiteVigenteVisto, manifestacaoCliente]
+      description: >-
+        NAO declara clienteId, contaId nem origemSolicitacao/origem (AC27): esses campos vem do
+        path ou sao fixados pelo dominio. Um payload tentando envia-los e simplesmente ignorado
+        pelo binding Jackson (FAIL_ON_UNKNOWN_PROPERTIES=false, padrao do Spring Boot).
+      properties:
+        limiteSolicitado:
+          type: integer
+          format: int64
+          description: >-
+            Em CENTAVOS. Numerico deliberadamente (nao string): um valor estruturalmente
+            impossivel aqui (`600000.5`, uma string) falha na desserializacao -- 400
+            COMANDO_ILEGIVEL -- nunca na validacao semantica (422 COMANDO_INVALIDO).
+          example: 600000
+        limiteVigenteVisto:
+          type: integer
+          format: int64
+          description: >-
+            O LimiteChequeEspecialVigente que o gerente VIU na tela, nunca autoritativo -- Credito
+            rele o vigente pela ACL na submissao (optimistic check).
+          example: 500000
+        manifestacaoCliente:
+          $ref: "#/components/schemas/ManifestacaoClienteRequest"
+    ManifestacaoClienteRequest:
+      type: object
+      required: [canalManifestacao]
+      properties:
+        canalManifestacao:
+          type: string
+          enum: [PRESENCIAL, TELEFONE, CANAL_DIGITAL]
+        observacao:
+          type: string
+          maxLength: 500
+          description: Opcional, com trim; vazia apos trim equivale a ausente.
+          nullable: true
+    DecisaoResponse:
+      type: object
+      required: [resultado, motivo, versaoPoliticaCredito, decididaEm]
+      properties:
+        resultado:
+          type: string
+          enum: [APROVADA, REJEITADA]
+        motivo:
+          type: string
+          enum: [CONTA_NAO_ELEGIVEL, PERFIL_RISCO_INCOMPATIVEL, DENTRO_DA_POLITICA_AUTOMATICA, FORA_DA_POLITICA_AUTOMATICA]
+          description: >-
+            Codigo estavel do dominio, nunca frase de interface. PERFIL_RISCO_INCOMPATIVEL nunca
+            expoe a ClassificacaoRiscoCreditoBase (AC3); FORA_DA_POLITICA_AUTOMATICA preserva a
+            semantica exata -- nao afirma risco elevado nem inelegibilidade permanente.
+        versaoPoliticaCredito:
+          type: string
+          example: v1
+        decididaEm:
+          type: string
+          format: date-time
+    SolicitacaoAumentoLimiteResponse:
+      type: object
+      required: [solicitacaoId, contaId, status, limiteChequeEspecialVigente, limiteSolicitado, decisao, registradaEm]
+      properties:
+        solicitacaoId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          example: "10001"
+        status:
+          type: string
+          enum: [AGUARDANDO_EFETIVACAO, REJEITADA]
+          description: >-
+            Neste ticket (#0003) a decisao automatica sempre ocorre na mesma resposta, entao so
+            estes dois valores sao alcancaveis aqui -- os demais estados da maquina
+            (SOLICITADA, EFETIVACAO_INDETERMINADA, EFETIVADA, FALHA_EFETIVACAO) pertencem a
+            #0004+.
+        limiteChequeEspecialVigente:
+          type: integer
+          format: int64
+          description: >-
+            O vigente CONFIRMADO pelo CoreLegado e congelado no contexto -- nunca o solicitado
+            (AC29). Em CENTAVOS.
+          example: 500000
+        limiteSolicitado:
+          type: integer
+          format: int64
+          example: 600000
+        limiteSolicitadoPendenteDeEfetivacao:
+          type: integer
+          format: int64
+          nullable: true
+          description: >-
+            PRESENCA e a pendencia (plano #0003): presente e igual a limiteSolicitado quando
+            status=AGUARDANDO_EFETIVACAO; AUSENTE do JSON (nao null expresso) quando REJEITADA.
+            Nao e booleano.
+          example: 600000
+        decisao:
+          $ref: "#/components/schemas/DecisaoResponse"
+        registradaEm:
+          type: string
+          format: date-time
     ProblemDetail:
       type: object
-      description: RFC 7807 (org.springframework.http.ProblemDetail).
+      description: >-
+        RFC 7807 (org.springframework.http.ProblemDetail), estendido com `codigo` -- codigo
+        estavel do dominio, nunca frase de interface (plano #0003, "Envelope de erro com codigo
+        estavel"). A UI nunca distingue erro por texto.
       properties:
         type:
           type: string
@@ -149,6 +405,22 @@ components:
           type: integer
         detail:
           type: string
+        codigo:
+          type: string
+          enum:
+            - IDEMPOTENCY_KEY_AUSENTE
+            - IDEMPOTENCY_KEY_INVALIDA
+            - COMANDO_ILEGIVEL
+            - IDENTIFICADOR_INVALIDO
+            - SEM_DIREITO_DE_ATENDIMENTO
+            - CONTA_NAO_ENCONTRADA
+            - LIMITE_VIGENTE_DESATUALIZADO
+            - SOLICITACAO_NAO_TERMINAL_EXISTENTE
+            - IDEMPOTENCIA_EM_PROCESSAMENTO
+            - COMANDO_INVALIDO
+            - LIMITE_SOLICITADO_NAO_AUMENTA
+            - IDEMPOTENCIA_FINGERPRINT_DIVERGENTE
+            - DEPENDENCIA_INDISPONIVEL
         instance:
           type: string
           format: uri

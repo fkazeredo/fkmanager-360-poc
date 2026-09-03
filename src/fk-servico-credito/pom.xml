@@ -16,11 +16,12 @@
 
     <name>fk-servico-credito</name>
     <description>
-        Contexto Credito, dono semantico do LimiteChequeEspecial. Neste ticket, expoe a consulta
-        do LimiteChequeEspecialVigente que o CoreLegado reconhece agora, lido pela ACL propria
-        deste contexto (ADR-0004), sempre depois de CarteiraClientes confirmar o direito de
-        atendimento (ADR-0007). Nasce SEM persistencia: nao ha estado duravel de Credito ainda, e
-        credito_db so existira quando a SolicitacaoAumentoLimite existir (ADR-0010, ADR-0014).
+        Contexto Credito, dono semantico do LimiteChequeEspecial. Expoe a consulta do
+        LimiteChequeEspecialVigente que o CoreLegado reconhece agora, lido pela ACL propria deste
+        contexto (ADR-0004), sempre depois de CarteiraClientes confirmar o direito de atendimento
+        (ADR-0007). A partir de #0003, tambem registra a SolicitacaoAumentoLimite e a decisao
+        automatica: credito_db nasce aqui, com Flyway embutido e credencial de DDL separada da
+        credencial de DML da aplicacao (ADR-0010, ADR-0014).
     </description>
 
     <properties>
@@ -64,8 +65,33 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Sem starter-jdbc, sem driver, sem Flyway: este servico nao tem persistencia neste
-             ticket, e a ausencia da dependencia e o que impede que ela apareca por descuido. -->
+        <!-- credito_db nasce neste ticket (#0003, ADR-0010, ADR-0014): primeiro comportamento com
+             estado duravel de Credito. Migracao embutida (ADR-0014, emenda 2026-09-02): Flyway
+             roda no boot com spring.flyway.* (credencial migrator, DDL), independente do
+             DataSource de spring.datasource.* (credencial app, DML) que o JdbcClient usa - mesmo
+             padrao ja em producao em fk-servico-carteira-clientes. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <!-- Escopo compile (nao runtime, ao contrario de carteira-clientes): o guardrail de
+             concorrencia do adapter de persistencia (SolicitacoesAumentoLimitePort, plano #0003)
+             inspeciona org.postgresql.util.PSQLException.getServerErrorMessage().getConstraint()
+             para identificar, so para log/diagnostico, qual constraint colidiu apos um conflito de
+             TX1 - a classificacao da resposta em si nunca depende disso (a releitura do registro
+             de idempotencia decide). Isso exige o driver no classpath de compilacao deste modulo. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
 
         <!-- Testes: Spring Boot 4 fatiou spring-boot-starter-test em starters por slice. -->
         <dependency>
@@ -76,6 +102,17 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- S3: persistencia contra PostgreSQL real (ADR-0018 - H2 nao substitui). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
         <!-- S5: smoke contra o simulador-core-legado real, sem duplicar a matriz patologica de S4. -->

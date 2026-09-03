@@ -64,6 +64,8 @@ if ((Test-Path $envDestino) -and -not $Forcar) {
         'POSTGRES_SUPERUSER_PASSWORD=troque-esta-senha-do-superuser'        = "POSTGRES_SUPERUSER_PASSWORD=$(New-SenhaAleatoria)"
         'CARTEIRA_DB_MIGRATOR_PASSWORD=troque-esta-senha-migrator'          = "CARTEIRA_DB_MIGRATOR_PASSWORD=$(New-SenhaAleatoria)"
         'CARTEIRA_DB_APP_PASSWORD=troque-esta-senha-app'                    = "CARTEIRA_DB_APP_PASSWORD=$(New-SenhaAleatoria)"
+        'CREDITO_DB_MIGRATOR_PASSWORD=troque-esta-senha-migrator'           = "CREDITO_DB_MIGRATOR_PASSWORD=$(New-SenhaAleatoria)"
+        'CREDITO_DB_APP_PASSWORD=troque-esta-senha-app'                     = "CREDITO_DB_APP_PASSWORD=$(New-SenhaAleatoria)"
         'REDIS_PASSWORD=troque-esta-senha-redis'                            = "REDIS_PASSWORD=$(New-SenhaAleatoria)"
         'AUTH_SERVER_BFF_CLIENT_SECRET=troque-este-client-secret'           = "AUTH_SERVER_BFF_CLIENT_SECRET=$(New-SenhaAleatoria)"
         'AUTH_SERVER_CREDITO_CLIENT_SECRET=troque-este-client-secret-credito' = "AUTH_SERVER_CREDITO_CLIENT_SECRET=$(New-SenhaAleatoria)"

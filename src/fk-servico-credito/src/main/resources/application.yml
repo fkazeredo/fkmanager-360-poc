@@ -1,6 +1,24 @@
 spring:
   application:
     name: fk-servico-credito
+  # AC27 / plano #0003, "Taxonomia de parsing": campos numericos (limiteSolicitado,
+  # limiteVigenteVisto) sao Long boxed no request DTO -- um valor com fracao como 600000.5
+  # precisa FALHAR na desserializacao (400 COMANDO_ILEGIVEL), nunca ser truncado silenciosamente
+  # para 600000 e seguir para a validacao semantica (422).
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+  datasource:
+    url: ${CREDITO_DB_JDBC_URL}
+    username: ${CREDITO_DB_APP_USER}
+    password: ${CREDITO_DB_APP_PASSWORD}
+  # Migracao embutida (ADR-0014, emenda 2026-09-02): DataSource proprio e independente do
+  # spring.datasource.* acima -- a query da aplicacao (JdbcClient) nunca ve a credencial de DDL,
+  # mesmo rodando no mesmo processo.
+  flyway:
+    url: ${CREDITO_DB_JDBC_URL}
+    user: ${CREDITO_DB_MIGRATOR_USER}
+    password: ${CREDITO_DB_MIGRATOR_PASSWORD}
   security:
     oauth2:
       # Resource Server: valida os tokens que chegam.

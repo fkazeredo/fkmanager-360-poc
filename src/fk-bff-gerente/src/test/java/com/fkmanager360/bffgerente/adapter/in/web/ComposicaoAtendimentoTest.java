@@ -110,7 +110,7 @@ class ComposicaoAtendimentoTest {
 
         when(tokenResolver.tokenPara(eq("carteira-clientes-exchange"), any(), any(), any()))
                 .thenReturn(TOKEN_CARTEIRA);
-        when(tokenResolver.tokenPara(eq("credito-exchange"), any(), any(), any()))
+        when(tokenResolver.tokenPara(eq("credito-leitura-exchange"), any(), any(), any()))
                 .thenReturn(TOKEN_CREDITO);
 
         carteiraClientes.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO)).willReturn(json("""
@@ -154,33 +154,51 @@ class ComposicaoAtendimentoTest {
                 .withHeader("Authorization", WireMock.equalTo("Bearer " + TOKEN_CREDITO)));
     }
 
+    /**
+     * 403/404 SEMPRE atravessam com o mesmo status, independentemente de o upstream publicar
+     * {@code codigo} (AC23, provado desde #0002 -- este teste continua afirmando exatamente essa
+     * garantia). {@code fk-servico-carteira-clientes} nao foi tocado por #0003 e nao publica
+     * {@code codigo}; por isso o envelope sai sem essa propriedade, mas o STATUS nunca regride
+     * para 502 -- 403/404 sao resposta autoritativa do backend dono do recurso (ADR-0007), nao
+     * falha de integracao (ver Javadoc de {@link GlobalExceptionHandler}).
+     */
     @Test
     void atendimento_semDireitoDeAtendimento_atravessaO403SemReinterpretar() throws Exception {
         carteiraClientes.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO)).willReturn(aResponse().withStatus(403)));
 
         mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").doesNotExist());
 
         // O BFF nao e enforcement point unico, mas tambem nao suaviza a recusa de quem e dono do
         // recurso: sem contexto de atendimento, nem chega a perguntar o limite.
         credito.verify(0, getRequestedFor(urlEqualTo(PATH_LIMITE)));
     }
 
+    /** Ver Javadoc de {@link #atendimento_semDireitoDeAtendimento_atravessaO403SemReinterpretar}. */
     @Test
     void atendimento_contaInexistente_atravessaO404() throws Exception {
         carteiraClientes.stubFor(WireMock.get(urlEqualTo(PATH_CONTEXTO)).willReturn(aResponse().withStatus(404)));
 
         mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.codigo").doesNotExist());
     }
 
+    /**
+     * Ate #0002, a mensagem unica de indisponibilidade era um texto livre em {@code detail}. O
+     * envelope publico proprio do plano #0003 (secao 9 "bff-gerente") carrega so
+     * {@code status}+{@code codigo} -- nenhum texto de interface vem do backend; a mensagem exibida
+     * ao gerente pertence ao app-gerente, decidida a partir do {@code codigo}.
+     */
     @Test
-    void atendimento_creditoIndisponivel_viraMensagemUnicaDeIndisponibilidade() throws Exception {
+    void atendimento_creditoIndisponivel_vira503ComCodigoDependenciaIndisponivel() throws Exception {
         credito.stubFor(WireMock.get(urlEqualTo(PATH_LIMITE)).willReturn(aResponse().withStatus(503)));
 
         mockMvc.perform(get(ENDPOINT).with(gerenteAutenticado()))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.detail").value("Nao foi possivel concluir a operacao agora, tente novamente"));
+                .andExpect(jsonPath("$.codigo").value("DEPENDENCIA_INDISPONIVEL"))
+                .andExpect(jsonPath("$.detail").doesNotExist());
     }
 
     @Test

@@ -116,6 +116,6 @@ public class AtendimentoController {
 
     private String tokenCredito(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
         return tokenResolver.tokenPara(
-                TokenExchangeConfig.REGISTRATION_CREDITO, authentication, request, response);
+                TokenExchangeConfig.REGISTRATION_CREDITO_LEITURA, authentication, request, response);
     }
 }
