@@ -3,11 +3,13 @@ package com.fkmanager360.credito.config;
 import com.fkmanager360.credito.application.FingerprintCanonico;
 import com.fkmanager360.credito.adapter.out.persistence.CreditoPersistenceOperations;
 import com.fkmanager360.credito.application.port.out.CargaParaDecisao;
+import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.IdempotenciaEmProcessamentoException;
 import com.fkmanager360.credito.application.port.out.NovaSolicitacaoAumentoLimite;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotencia;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
 import com.fkmanager360.credito.application.port.out.ResultadoAplicacaoDecisao;
+import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.SolicitacaoCriada;
 import com.fkmanager360.credito.application.port.out.SolicitacaoNaoTerminalExistente;
 import com.fkmanager360.credito.application.port.out.SolicitacoesAumentoLimitePort;
@@ -98,7 +100,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "credito.security.expected-audience=" + JwtDecoderTestConfig.EXPECTED_AUDIENCE,
                 "spring.flyway.enabled=false",
                 "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
-                        + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration"
+                        + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration",
+                "credito.efetivacao.entrega.habilitada=false"
         })
 @AutoConfigureMockMvc
 @Import(JwtDecoderTestConfig.class)
@@ -165,6 +168,14 @@ class SubmissaoSegurancaTest {
     // isto e, uma anotacao de producao cuja unica justificativa seria este arquivo).
     @MockitoBean
     private CreditoPersistenceOperations creditoPersistenceOperations;
+
+    // #0004: mesma razao das portas acima -- sem mocka-las, o bean EntregarInstrucoesEfetivacao
+    // exigiria os adapters JPA reais (JdbcClient/EntityManager que este contexto nao tem).
+    @MockitoBean
+    private EntregasEfetivacaoPort entregasEfetivacaoPort;
+
+    @MockitoBean
+    private ResultadoEfetivacaoPort resultadoEfetivacaoPort;
 
     /** Preenchido pelo stub padrao de {@code registrar(...)}, reaproveitado por quem precisar do contexto congelado. */
     private final AtomicReference<ContextoDecisaoCredito> contextoCapturado = new AtomicReference<>();

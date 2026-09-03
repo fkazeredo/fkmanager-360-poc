@@ -53,7 +53,8 @@ final class CoreLegadoCall {
         }
     }
 
-    private static boolean causeContains(Throwable exception, Class<? extends Throwable> type) {
+    /** Pacote-visivel: reusado por {@link EfetivacaoLegadoAclAdapter}, mesma checagem de causa-raiz. */
+    static boolean causeContains(Throwable exception, Class<? extends Throwable> type) {
         Throwable cause = exception.getCause();
         while (cause != null) {
             if (type.isInstance(cause)) {

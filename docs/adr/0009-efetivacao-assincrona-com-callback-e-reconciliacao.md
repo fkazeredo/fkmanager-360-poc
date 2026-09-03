@@ -53,9 +53,15 @@ esta seção os fecha sem revogá-la.
 
 **A instrução carrega identidade de negócio própria.** Junto com o registro durável da intenção,
 `Credito` gera um `EfetivacaoId` que viaja na instrução e permanece estável por toda a vida da
-operação, inclusive através de reenvios. Ele não é o `messageId` do Outbox, que é técnico e pode
-mudar a cada tentativa de entrega. O CoreLegado deduplica funcionalmente por ele: a mesma instrução
-reenviada não aplica a alteração duas vezes e devolve o mesmo `ProtocoloCore` quando este já existe.
+operação, inclusive através de reenvios. Ele é distinto do `messageId` do Outbox — que identifica a
+mensagem lógica registrada, não a operação de negócio perante o Core — mas os dois são **igualmente
+estáveis**: um retry da mesma mensagem preserva ambos (revisão de 2026-09-02, spec, seção
+"`EfetivacaoId`, instrução e `ProtocoloCore`"; operacionalizado a partir do #0004, cujo
+`outbox_entrega.message_id` é PK/FK 1:1 com `outbox_mensagem` e nunca muda entre tentativas). O que
+varia entre tentativas é metadado de entrega — contador de tentativas, timestamps, último erro —
+nunca a identidade da mensagem. O CoreLegado deduplica funcionalmente por `EfetivacaoId`: a mesma
+instrução reenviada não aplica a alteração duas vezes e devolve o mesmo `ProtocoloCore` quando este
+já existe.
 Essa deduplicação é comportamento funcional do Core, e não capacidade do control plane de cenários
 (ADR-0018).
 

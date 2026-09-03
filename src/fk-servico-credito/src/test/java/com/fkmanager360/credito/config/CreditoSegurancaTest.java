@@ -1,7 +1,9 @@
 package com.fkmanager360.credito.config;
 
 import com.fkmanager360.credito.adapter.out.persistence.CreditoPersistenceOperations;
+import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
+import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.SolicitacoesAumentoLimitePort;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -69,7 +71,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 // real, ele nao teria contra o que migrar.
                 "spring.flyway.enabled=false",
                 "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
-                        + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration"
+                        + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration",
+                // #0004: sem isto, o dispatcher real dispararia a cada ~1s contra as portas
+                // mockadas abaixo (que devolveriam null sem stub), sem nenhum ganho para um teste
+                // que nao exercita entrega.
+                "credito.efetivacao.entrega.habilitada=false"
         })
 @AutoConfigureMockMvc
 @Import(JwtDecoderTestConfig.class)
@@ -130,6 +136,16 @@ class CreditoSegurancaTest {
     // isto e, uma anotacao de producao cuja unica justificativa seria este arquivo).
     @MockitoBean
     private CreditoPersistenceOperations creditoPersistenceOperations;
+
+    // #0004: mesma razao das duas portas acima -- sem mocka-las, o component scan instanciaria
+    // JpaEntregasEfetivacaoAdapter/JpaResultadoEfetivacaoAdapter (via o bean
+    // EntregarInstrucoesEfetivacao, que os exige no construtor), exigindo JdbcClient/EntityManager
+    // que este contexto nao tem.
+    @MockitoBean
+    private EntregasEfetivacaoPort entregasEfetivacaoPort;
+
+    @MockitoBean
+    private ResultadoEfetivacaoPort resultadoEfetivacaoPort;
 
     @BeforeEach
     void comportamentoPadraoDasDependencias() {

@@ -154,13 +154,22 @@ class JpaSolicitacoesAumentoLimiteAdapterTest {
 
     @BeforeAll
     static void provisionarPapeisMigrarESubirAdapterComCredencialDeApp() throws Exception {
-        creditoJdbcUrl = "jdbc:postgresql://" + POSTGRES.getHost() + ":" + POSTGRES.getMappedPort(5432) + "/credito_db";
+        // #0004: o test runner deste modulo tambem roda dentro de um container
+        // (Docker-outside-of-Docker, socket montado -- memoria de projeto "maven-via-docker"). Neste
+        // ambiente, o mapeamento de porta publicada do Postgres (host:portaMapeada, via gateway da
+        // bridge) mostrou-se consistentemente inalcancavel a partir de outro container, mesmo com o
+        // container saudavel e a porta corretamente publicada (verificado empiricamente) -- o
+        // proprio IP do container na rede bridge, porta 5432 direta, e sempre alcancavel. Usar o IP
+        // do container evita depender do proxy de porta publicada do Docker Desktop; retry curto
+        // cobre o restart interno do Postgres (initdb -> shutdown -> start real).
+        String enderecoContainer = enderecoNaRedeBridge(POSTGRES);
+        String superuserJdbcUrl = "jdbc:postgresql://" + enderecoContainer + ":5432/" + POSTGRES.getDatabaseName();
+        creditoJdbcUrl = "jdbc:postgresql://" + enderecoContainer + ":5432/credito_db";
 
         // Espelha infra/postgres-init/02-credito.sh literalmente, so que em Java: o superusuario
         // do Testcontainers e usado APENAS aqui, para criar os dois papeis e o database -- nunca
         // pelos testes funcionais abaixo.
-        try (Connection superusuario = DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        try (Connection superusuario = conectarComRetry(superuserJdbcUrl, POSTGRES.getUsername(), POSTGRES.getPassword());
              Statement stmt = superusuario.createStatement()) {
             stmt.execute("create role " + MIGRATOR_USER + " with login password '" + MIGRATOR_PASSWORD + "'");
             stmt.execute("create role " + APP_USER + " with login password '" + APP_PASSWORD + "'");
@@ -203,6 +212,33 @@ class JpaSolicitacoesAumentoLimiteAdapterTest {
     static void fecharRecursos() {
         applicationContext.close();
         appDataSource.close();
+    }
+
+    /**
+     * O container Postgres reinicia uma vez internamente (initdb -&gt; shutdown -&gt; start real);
+     * a primeira tentativa de conexao pode chegar exatamente na janela do restart e ser recusada
+     * mesmo depois do container ser reportado como "started". Retry curto, sem sleep longo (#0004).
+     */
+    private static Connection conectarComRetry(String url, String user, String password) throws Exception {
+        java.sql.SQLException ultimaFalha = null;
+        for (int tentativa = 0; tentativa < 20; tentativa++) {
+            try {
+                return DriverManager.getConnection(url, user, password);
+            } catch (java.sql.SQLException e) {
+                ultimaFalha = e;
+                Thread.sleep(500);
+            }
+        }
+        throw ultimaFalha;
+    }
+
+    /**
+     * IP do container na rede {@code bridge} -- alcancavel a partir de outro container mesmo
+     * quando o mapeamento de porta publicada (host:portaMapeada) nao esta, neste ambiente de
+     * execucao (#0004; ver comentario em {@link #provisionarPapeisMigrarESubirAdapterComCredencialDeApp}).
+     */
+    private static String enderecoNaRedeBridge(org.testcontainers.containers.GenericContainer<?> container) {
+        return container.getContainerInfo().getNetworkSettings().getNetworks().get("bridge").getIpAddress();
     }
 
     /**

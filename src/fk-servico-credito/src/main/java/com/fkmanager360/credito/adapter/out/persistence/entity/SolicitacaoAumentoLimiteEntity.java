@@ -66,6 +66,16 @@ public class SolicitacaoAumentoLimiteEntity {
     @Column(name = "efetivacao_id")
     private UUID efetivacaoId;
 
+    // #0004: preenchido no aceite (ACEITE); nunca sobrescrito por um valor divergente para o
+    // mesmo EfetivacaoId (anomalia observavel, nao erro de negocio -- plano #0004, secao 9).
+    @Column(name = "protocolo_core")
+    private String protocoloCore;
+
+    // #0004: preenchido somente quando status = FALHA_EFETIVACAO por retorno definitivo do Core
+    // ja na propria instrucao (AC15).
+    @Column(name = "motivo_falha_efetivacao")
+    private String motivoFalhaEfetivacao;
+
     @Column(name = "registrada_em", nullable = false)
     private Instant registradaEm;
 

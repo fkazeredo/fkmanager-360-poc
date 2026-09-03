@@ -3,12 +3,14 @@ info:
   title: fk-simulador-core-legado
   description: >-
     Contrato host-centric FICTICIO desta POC (ADR-0005) -- nao e replica de nenhum core bancario
-    real. Tres capacidades: consulta em lote dos dados mestres do Cliente e consulta das contas de
-    um Cliente, ambas consumidas pela ACL de fk-servico-carteira-clientes; e consulta dos dados de
-    credito de uma conta, consumida pela ACL de fk-servico-credito. Cada contexto integra o legado
-    pela sua propria ACL, apenas na fatia que lhe diz respeito (ADR-0004). fk-bff-gerente nunca
-    chama este servico diretamente (AC30).
-  version: "0002"
+    real. Quatro capacidades: consulta em lote dos dados mestres do Cliente e consulta das contas
+    de um Cliente, ambas consumidas pela ACL de fk-servico-carteira-clientes; consulta dos dados de
+    credito de uma conta e recepcao da instrucao de efetivacao, ambas consumidas pela ACL de
+    fk-servico-credito. Cada contexto integra o legado pela sua propria ACL, apenas na fatia que
+    lhe diz respeito (ADR-0004). fk-bff-gerente nunca chama este servico diretamente (AC30). O
+    control plane de cenarios de efetivacao (ADR-0018), ativo apenas nos profiles local/demo/test,
+    e deliberadamente separado deste contrato funcional e nao aparece aqui.
+  version: "0004"
 servers:
   - url: http://localhost:8090
     description: Rede interna do Docker Compose (nome de servico), porta exposta localmente para dev.
@@ -16,7 +18,7 @@ tags:
   - name: cliente-legado
     description: Consulta em lote de dados mestres, formato host-centric fictício.
   - name: conta-legado
-    description: Consulta de contas de um Cliente e dos dados de credito de uma conta.
+    description: Consulta de contas de um Cliente, dos dados de credito de uma conta e efetivacao do limite.
 paths:
   /legado/contas/consulta:
     post:
@@ -72,6 +74,41 @@ paths:
                 $ref: "#/components/schemas/CreditoContaLegadoQueryResponse"
         "400":
           description: numCta ausente ou fora do formato de 10 digitos.
+  /legado/efetivacoes:
+    post:
+      operationId: efetivarLimiteLegado
+      tags: [conta-legado]
+      summary: Recepcao da instrucao de efetivacao do LimiteChequeEspecial, com deduplicacao por idEft
+      description: >-
+        idEft e idCor carregam UUID por extenso -- identidade de negocio, nao formato host-centric
+        numerico (spec, secao "EfetivacaoId, instrucao e ProtocoloCore"). A MESMA instrucao
+        reenviada (mesmo idEft, mesmo payload) nunca aplica a alteracao duas vezes e devolve o
+        MESMO numPrt; o mesmo idEft com payload diferente e sempre rejeitado explicitamente
+        (codRet 207), nunca tratado como operacao nova. Esta operacao NAO aplica a alteracao no
+        limite consultado por /legado/contas/consulta-credito -- confirmacao e callback pertencem
+        a #0005; consulta de status por protocolo/idEft a #0006.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EfetivacaoLegadoRequest"
+      responses:
+        "200":
+          description: >-
+            Requisicao processada -- aceite, uma das quatro classes de falha definitiva, ou
+            indisponibilidade de negocio conhecida (codRet "998") chegam aqui dentro do 200
+            (ADR-0005). Este simulador especificamente nunca emite "998" (seus cenarios de
+            control-plane modelam indisponibilidade como HTTP 5xx real, nao como 200 com codRet de
+            erro) -- o codigo existe no contrato e na ACL porque a taxonomia da operacao o preve
+            como resposta de negocio valida vinda do host, verificado contra WireMock (S4), nao
+            contra este simulador (S5).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EfetivacaoLegadoResponse"
+        "400":
+          description: Campo obrigatorio ausente ou fora do formato esperado.
   /legado/clientes/consulta-lote:
     post:
       operationId: consultarClientesLegadoEmLote
@@ -218,6 +255,56 @@ components:
             com o instante em que a plataforma consultou -- sao conceitos distintos, e a ACL de
             Credito nao deriva um do outro.
           example: "20260115"
+    EfetivacaoLegadoRequest:
+      type: object
+      required: [idEft, numCta, vlrLimChqEspEsp, vlrLimNov, idCor]
+      properties:
+        idEft:
+          type: string
+          description: EfetivacaoId por extenso (UUID) -- identidade de negocio da tentativa, estavel atraves de reenvios.
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        numCta:
+          type: string
+          pattern: "^\\d{10}$"
+          example: "0000010001"
+        vlrLimChqEspEsp:
+          type: string
+          description: >-
+            LimiteChequeEspecialVigenteEsperado -- a precondicao congelada no ContextoDecisaoCredito.
+            Centavos, 15 digitos com zero-padding, sem separador.
+          example: "000000000500000"
+        vlrLimNov:
+          type: string
+          description: LimiteSolicitado. Centavos, 15 digitos com zero-padding, sem separador.
+          example: "000000000600000"
+        idCor:
+          type: string
+          description: CorrelationId por extenso (UUID) -- metadado de correlacao, nunca chave de negocio.
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+    EfetivacaoLegadoResponse:
+      type: object
+      required: [codRet, msgRet, idEft, idCor]
+      properties:
+        codRet:
+          type: string
+          description: >-
+            "000" aceite; "121" conta nao encontrada; "118" conta bloqueada; "205" limite vigente
+            divergente; "199" instrucao invalida; "207" idEft ja existente com payload
+            incompativel; "998" indisponibilidade transitoria de negocio (nunca emitido por este
+            simulador -- ver descricao do 200 acima).
+          example: "000"
+        msgRet:
+          type: string
+        idEft:
+          type: string
+          description: Ecoado da requisicao.
+        numPrt:
+          type: string
+          description: ProtocoloCore, 12 digitos com zero-padding. Presente somente no aceite (codRet "000").
+          example: "000000000001"
+        idCor:
+          type: string
+          description: Ecoado da requisicao.
     ClientesLegadoQueryResponse:
       type: object
       required: [codRet, msgRet, clientes]

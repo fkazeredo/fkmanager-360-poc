@@ -22,4 +22,13 @@ final class HostFormat {
     static String toCodigoHost(String valor) {
         return "%010d".formatted(Long.parseLong(valor));
     }
+
+    /**
+     * Dinheiro em centavos, zero-padding a 15 digitos, sem separador (ADR-0005) -- o mesmo formato
+     * que {@code simulador-core-legado} ja usa para {@code VLR-LIM-CHQ-ESP} (#0002). #0004 reusa
+     * este formato para os dois valores monetarios da instrucao de efetivacao.
+     */
+    static String toValorMonetarioHost(long centavos) {
+        return "%015d".formatted(centavos);
+    }
 }

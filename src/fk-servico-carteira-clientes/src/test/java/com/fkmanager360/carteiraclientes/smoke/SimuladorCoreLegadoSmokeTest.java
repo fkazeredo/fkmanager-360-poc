@@ -53,7 +53,12 @@ class SimuladorCoreLegadoSmokeTest {
     @Container
     static final GenericContainer<?> SIMULADOR = new GenericContainer<>(DockerImageName.parse(IMAGEM))
             .withExposedPorts(8090)
-            .waitingFor(Wait.forHttp("/actuator/health").forStatusCode(200))
+            // #0004 (fix de infraestrutura de teste, sem relacao com #0001): espera por MENSAGEM
+            // DE LOG (lida via API do Docker), nao por HTTP contra a porta publicada -- neste
+            // ambiente de execucao (Docker-outside-of-Docker), o mapeamento de porta publicada
+            // mostrou-se inalcancavel a partir de outro container mesmo com o container saudavel,
+            // enquanto a leitura de log via API nao depende dessa rota de rede.
+            .waitingFor(Wait.forLogMessage(".*Started SimuladorCoreLegadoApplication.*\\n", 1))
             .withStartupTimeout(Duration.ofMinutes(2));
 
     private static void construirImagemViaDockerCli() throws IOException, InterruptedException {
@@ -72,13 +77,22 @@ class SimuladorCoreLegadoSmokeTest {
         }
     }
 
+    /**
+     * #0004 (fix de infraestrutura de teste): IP do container na rede bridge, nao
+     * {@code getHost()+getMappedPort()} -- ver comentario na wait strategy de {@link #SIMULADOR}.
+     */
+    private static String baseUrlDoSimulador() {
+        String enderecoContainer = SIMULADOR.getContainerInfo().getNetworkSettings().getNetworks().get("bridge").getIpAddress();
+        return "http://" + enderecoContainer + ":8090";
+    }
+
     private RestClient restClientContraOSimuladorReal() {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
         requestFactory.setReadTimeout(Duration.ofSeconds(5));
 
         return RestClient.builder()
-                .baseUrl("http://" + SIMULADOR.getHost() + ":" + SIMULADOR.getMappedPort(8090))
+                .baseUrl(baseUrlDoSimulador())
                 .requestFactory(requestFactory)
                 .build();
     }
