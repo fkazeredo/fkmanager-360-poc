@@ -4,6 +4,7 @@ import com.fkmanager360.carteiraclientes.application.port.out.DadosMestresClient
 import com.fkmanager360.carteiraclientes.application.port.out.InvalidCoreLegadoResponseException;
 import com.fkmanager360.carteiraclientes.domain.ClienteId;
 import com.fkmanager360.carteiraclientes.domain.DadosMestresCliente;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -18,16 +19,14 @@ import java.util.Map;
  * valido, como ausencia (nao encontrado) ou como uma das excecoes tipadas desta porta.
  */
 @Component
+@RequiredArgsConstructor
 public class ClienteLegadoAclAdapter implements DadosMestresClientePort {
 
     private static final String COD_RET_SUCESSO = "000";
     private static final String COD_RET_NAO_ENCONTRADO = "104";
 
+    @Qualifier("coreLegadoRestClient")
     private final RestClient restClient;
-
-    public ClienteLegadoAclAdapter(@Qualifier("coreLegadoRestClient") RestClient restClient) {
-        this.restClient = restClient;
-    }
 
     @Override
     public Map<ClienteId, DadosMestresCliente> buscarDadosMestres(List<ClienteId> clienteIds) {

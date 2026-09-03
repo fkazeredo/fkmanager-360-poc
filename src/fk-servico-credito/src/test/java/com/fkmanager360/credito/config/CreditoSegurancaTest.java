@@ -1,5 +1,8 @@
 package com.fkmanager360.credito.config;
 
+import com.fkmanager360.credito.adapter.out.persistence.CreditoPersistenceOperations;
+import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
+import com.fkmanager360.credito.application.port.out.SolicitacoesAumentoLimitePort;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -16,6 +19,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.net.URLDecoder;
@@ -56,7 +60,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = "credito.security.expected-audience=" + JwtDecoderTestConfig.EXPECTED_AUDIENCE)
+        properties = {
+                "credito.security.expected-audience=" + JwtDecoderTestConfig.EXPECTED_AUDIENCE,
+                // S6 nao exercita persistencia (isso e S3, com Testcontainers): sem esta exclusao,
+                // a autoconfiguracao do DataSource tentaria abrir uma conexao real na
+                // inicializacao do contexto, a partir de #0003 (mesmo padrao ja estabelecido em
+                // CarteiraSegurancaTest). Flyway desligado pelo mesmo motivo -- sem datasource
+                // real, ele nao teria contra o que migrar.
+                "spring.flyway.enabled=false",
+                "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
+                        + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration"
+        })
 @AutoConfigureMockMvc
 @Import(JwtDecoderTestConfig.class)
 class CreditoSegurancaTest {
@@ -96,6 +110,26 @@ class CreditoSegurancaTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    // S6 nao reexamina persistencia (isso e S3, com Testcontainers): estes testes de seguranca
+    // exercitam somente o GET de leitura, que nunca toca a persistencia. Mockar as portas aqui --
+    // e nao so excluir a autoconfiguracao do DataSource -- evita que o Spring precise instanciar
+    // os adapters reais (que exigem DataSource/EntityManager de verdade) so para o contexto subir.
+    // Mesmo padrao ja estabelecido em CarteiraSegurancaTest.
+    @MockitoBean
+    private SolicitacoesAumentoLimitePort solicitacoesAumentoLimitePort;
+
+    @MockitoBean
+    private RegistroIdempotenciaPort registroIdempotenciaPort;
+
+    // CreditoPersistenceOperations e o fragment transacional de TX1/TX2, e nao implementa nenhuma
+    // port -- entao mockar as duas portas acima nao o substitui, e o component scan o instanciaria
+    // avidamente exigindo o EntityManager que este contexto deliberadamente nao tem. Declarar aqui
+    // que este teste tambem nao exercita esse bean e a forma correta: a exclusao pertence ao teste
+    // que escolheu subir sem banco, nunca a producao (a alternativa seria um @Lazy no bean real,
+    // isto e, uma anotacao de producao cuja unica justificativa seria este arquivo).
+    @MockitoBean
+    private CreditoPersistenceOperations creditoPersistenceOperations;
 
     @BeforeEach
     void comportamentoPadraoDasDependencias() {

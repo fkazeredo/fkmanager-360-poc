@@ -17,7 +17,7 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: 'https://localhost',
+    baseURL: 'https://localhost:4200',
     ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
   },

@@ -1,5 +1,6 @@
 package com.fkmanager360.servidorautorizacao.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -59,6 +60,7 @@ import java.util.stream.Collectors;
  * mesma lista, autenticar a mesma requisicao e emitir o token mesmo assim. Delegar por chamada de
  * metodo direta e o unico jeito de garantir que nenhum token seja gerado quando a politica recusa.
  */
+@RequiredArgsConstructor
 class TokenExchangePolicyAuthenticationProvider implements AuthenticationProvider {
 
     static final String ALLOWED_TARGETS_SETTING = "fk.token-exchange.allowed-targets";
@@ -67,11 +69,6 @@ class TokenExchangePolicyAuthenticationProvider implements AuthenticationProvide
 
     private final AuthenticationProvider delegate;
     private final JwtDecoder subjectTokenDecoder;
-
-    TokenExchangePolicyAuthenticationProvider(AuthenticationProvider delegate, JwtDecoder subjectTokenDecoder) {
-        this.delegate = delegate;
-        this.subjectTokenDecoder = subjectTokenDecoder;
-    }
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {

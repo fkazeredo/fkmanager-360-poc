@@ -49,6 +49,18 @@ final class JwtTestSupport {
                 List.of("GERENTE_RELACIONAMENTO"), Instant.now().plusSeconds(300));
     }
 
+    /**
+     * Least privilege por operacao (plano #0003, secao 9): o token delegado para a submissao
+     * carrega {@code credito.escrita}, e NUNCA {@code credito.leitura} -- a troca de #0003 pede
+     * so o que aquela operacao usa. Reaproveitado tanto para o caminho feliz do POST quanto para
+     * provar que este MESMO token, sem {@code credito.leitura}, e recusado no GET (S6, scope
+     * cruzado).
+     */
+    static String tokenComEscritaDeCredito(String subject, String audience) {
+        return token(subject, audience, "credito.escrita carteira.leitura",
+                List.of("GERENTE_RELACIONAMENTO"), Instant.now().plusSeconds(300));
+    }
+
     static String tokenWithoutManagerRole(String subject, String audience) {
         return token(subject, audience, "credito.leitura carteira.leitura", List.of(), Instant.now().plusSeconds(300));
     }

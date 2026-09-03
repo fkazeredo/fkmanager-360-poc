@@ -64,7 +64,15 @@ public class TokenExchangeConfig {
 
     static final String REGISTRATION_LOGIN = "servidor-autorizacao";
     public static final String REGISTRATION_CARTEIRA_CLIENTES = "carteira-clientes-exchange";
-    public static final String REGISTRATION_CREDITO = "credito-exchange";
+    /** Delegacao para o GET do limite vigente (scope {@code credito.leitura}). */
+    public static final String REGISTRATION_CREDITO_LEITURA = "credito-leitura-exchange";
+    /**
+     * Delegacao para o POST de submissao (scope {@code credito.escrita}) -- plano #0003, secao 9,
+     * "Least privilege por operacao". Mesmo destino/audience de {@link #REGISTRATION_CREDITO_LEITURA}
+     * ({@code servico-credito}); so o scope pedido muda, resolvido por registration em
+     * {@code application.yml}.
+     */
+    public static final String REGISTRATION_CREDITO_ESCRITA = "credito-escrita-exchange";
 
     @Bean
     OAuth2AuthorizedClientManager authorizedClientManager(
@@ -74,11 +82,13 @@ public class TokenExchangeConfig {
             @Value("${bff-gerente.credito.audience}") String creditoAudience) {
 
         // A audience deixa de ser um valor unico e passa a ser resolvida por registration: com
-        // dois destinos, um customizer fixo mandaria a audience errada para um deles -- e o token
-        // seria recusado la na frente, por um erro cuja causa nao esta onde ele aparece.
+        // tres destinos (dois deles para o MESMO servico-credito, um por scope), um customizer
+        // fixo mandaria a audience errada para um deles -- e o token seria recusado la na frente,
+        // por um erro cuja causa nao esta onde ele aparece.
         Map<String, String> audiencePorRegistration = Map.of(
                 REGISTRATION_CARTEIRA_CLIENTES, carteiraClientesAudience,
-                REGISTRATION_CREDITO, creditoAudience);
+                REGISTRATION_CREDITO_LEITURA, creditoAudience,
+                REGISTRATION_CREDITO_ESCRITA, creditoAudience);
 
         TokenExchangeOAuth2AuthorizedClientProvider tokenExchangeProvider = new TokenExchangeOAuth2AuthorizedClientProvider();
         tokenExchangeProvider.setSubjectTokenResolver(

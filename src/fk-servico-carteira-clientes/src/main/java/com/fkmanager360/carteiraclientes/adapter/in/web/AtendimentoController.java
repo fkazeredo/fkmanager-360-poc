@@ -6,6 +6,7 @@ import com.fkmanager360.carteiraclientes.application.usecase.ListarContasDoClien
 import com.fkmanager360.carteiraclientes.domain.ClienteId;
 import com.fkmanager360.carteiraclientes.domain.ContaId;
 import com.fkmanager360.carteiraclientes.domain.GerenteId;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -30,20 +31,12 @@ import org.springframework.web.bind.annotation.RestController;
  * e tratado como verdade sobre a quem a conta pertence -- isso quem afirma e o Core.
  */
 @RestController
+@RequiredArgsConstructor
 public class AtendimentoController {
 
     private final ListarContasDoCliente listarContasDoCliente;
     private final ConfirmarDireitoDeAtendimento confirmarDireitoDeAtendimento;
     private final ConsultarContextoAtendimento consultarContextoAtendimento;
-
-    public AtendimentoController(
-            ListarContasDoCliente listarContasDoCliente,
-            ConfirmarDireitoDeAtendimento confirmarDireitoDeAtendimento,
-            ConsultarContextoAtendimento consultarContextoAtendimento) {
-        this.listarContasDoCliente = listarContasDoCliente;
-        this.confirmarDireitoDeAtendimento = confirmarDireitoDeAtendimento;
-        this.consultarContextoAtendimento = consultarContextoAtendimento;
-    }
 
     @GetMapping("/clientes/{clienteId}/contas")
     ContasResponse listarContas(@AuthenticationPrincipal Jwt jwt, @PathVariable String clienteId) {

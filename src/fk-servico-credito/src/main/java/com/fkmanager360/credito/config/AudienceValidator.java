@@ -1,5 +1,6 @@
 package com.fkmanager360.credito.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
@@ -14,16 +15,13 @@ import org.springframework.security.oauth2.jwt.Jwt;
  * nao atravessam bounded contexts (ADR-0011), e um modulo comum acoplaria os dois servicos so
  * para poupar trinta linhas -- exatamente o que "monorepo preparado para polyrepo" recusa.
  */
+@RequiredArgsConstructor
 public class AudienceValidator implements OAuth2TokenValidator<Jwt> {
 
     private static final OAuth2Error INVALID_AUDIENCE_ERROR =
             new OAuth2Error("invalid_token", "O token nao foi emitido para este Resource Server", null);
 
     private final String expectedAudience;
-
-    public AudienceValidator(String expectedAudience) {
-        this.expectedAudience = expectedAudience;
-    }
 
     @Override
     public OAuth2TokenValidatorResult validate(Jwt jwt) {

@@ -4,13 +4,13 @@ import com.fkmanager360.bffgerente.config.DelegatedTokenResolver;
 import com.fkmanager360.bffgerente.config.TokenExchangeConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 
-import java.util.regex.Pattern;
 
 /**
  * A composicao da tela de atendimento (AC30): o modelo de apresentacao e montado <b>aqui</b>, a
@@ -35,22 +35,12 @@ import java.util.regex.Pattern;
  * par de chamadas nesta rota. Adiado deliberadamente; nao e um descuido.
  */
 @RestController
+@RequiredArgsConstructor
 public class AtendimentoController {
-
-    private static final Pattern IDENTIFICADOR_HOST = Pattern.compile("[0-9]{1,10}");
 
     private final RestClient carteiraClientesRestClient;
     private final RestClient creditoRestClient;
     private final DelegatedTokenResolver tokenResolver;
-
-    public AtendimentoController(
-            RestClient carteiraClientesRestClient,
-            RestClient creditoRestClient,
-            DelegatedTokenResolver tokenResolver) {
-        this.carteiraClientesRestClient = carteiraClientesRestClient;
-        this.creditoRestClient = creditoRestClient;
-        this.tokenResolver = tokenResolver;
-    }
 
     @GetMapping(path = "/api/clientes/{clienteId}/contas", produces = "application/json")
     String listarContasDoCliente(
@@ -59,7 +49,7 @@ public class AtendimentoController {
             HttpServletRequest request,
             HttpServletResponse response) {
 
-        validarIdentificador(clienteId, "clienteId");
+        IdentificadorHost.validar(clienteId, "clienteId");
 
         // Encaminhamento simples: a tela precisa das contas, e nao ha nada a compor ainda. Se a
         // tela nao precisa de composicao, encaminhar e resposta legitima (ADR-0013).
@@ -78,8 +68,8 @@ public class AtendimentoController {
             HttpServletRequest request,
             HttpServletResponse response) {
 
-        validarIdentificador(clienteId, "clienteId");
-        validarIdentificador(contaId, "contaId");
+        IdentificadorHost.validar(clienteId, "clienteId");
+        IdentificadorHost.validar(contaId, "contaId");
 
         ContextoAtendimentoResponse contexto = carteiraClientesRestClient.get()
                 .uri("/clientes/{clienteId}/contas/{contaId}/contexto-atendimento", clienteId, contaId)
@@ -96,19 +86,6 @@ public class AtendimentoController {
         return AtendimentoResponse.de(contexto, limite);
     }
 
-    /**
-     * Validacao na propria borda do BFF (achado I1 do review): um {@code clienteId}/{@code contaId}
-     * fora do formato host nunca deveria virar uma chamada remota que so vai falhar la na frente
-     * -- e sem esta validacao, o 400 que CarteiraClientes devolveria escapava do
-     * {@link GlobalExceptionHandler} (que nao trata {@code HttpClientErrorException.BadRequest})
-     * e virava 500 generico.
-     */
-    private static void validarIdentificador(String valor, String nomeDoCampo) {
-        if (valor == null || !IDENTIFICADOR_HOST.matcher(valor).matches()) {
-            throw new IllegalArgumentException(nomeDoCampo + " deve ser numerico, com ate 10 digitos: " + valor);
-        }
-    }
-
     private String tokenCarteira(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
         return tokenResolver.tokenPara(
                 TokenExchangeConfig.REGISTRATION_CARTEIRA_CLIENTES, authentication, request, response);
@@ -116,6 +93,6 @@ public class AtendimentoController {
 
     private String tokenCredito(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
         return tokenResolver.tokenPara(
-                TokenExchangeConfig.REGISTRATION_CREDITO, authentication, request, response);
+                TokenExchangeConfig.REGISTRATION_CREDITO_LEITURA, authentication, request, response);
     }
 }

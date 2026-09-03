@@ -170,7 +170,7 @@ test.describe('Jornada 1 -- primeiros passos', () => {
 
     // Um unico endereco publico: nem servico-credito, nem servico-carteira-clientes, nem o
     // simulador tem porta publicada -- a composicao acontece no servidor (AC30).
-    expect([...origensChamadas]).toEqual(['https://localhost']);
+    expect([...origensChamadas]).toEqual(['https://localhost:4200']);
   });
 
   test('AC23: sem direito de atendimento, o backend recusa mesmo sem passar pela navegacao do Angular', async ({
@@ -285,5 +285,47 @@ test.describe('Jornada 1 -- primeiros passos', () => {
     await expect(page.getByRole('button', { name: 'Entrar' })).not.toBeVisible();
 
     expect(respostasComToken).toEqual([]);
+  });
+
+  /**
+   * #0003 estende a jornada 1: submissao -> decisao automatica -> AGUARDANDO_EFETIVACAO
+   * (AC1 parcial, AC29 parcial). Usa a conta 10002 (SEGUNDA conta do cliente 1, risco MEDIO,
+   * vigente R$ 1.200,00) -- deliberadamente NAO a 10001, que fica livre em SOLICITADA/estado
+   * terminal nenhum para que os testes de AC22/AC29 acima continuem repetiveis. Um incremento de
+   * R$ 800,00 (vigente 1.200,00 -> solicitado 2.000,00) fica dentro da politica v1 (risco MEDIO
+   * permitido, total <= R$ 10.000,00, incremento <= R$ 2.000,00) -> APROVADA.
+   */
+  test('AC1/AC29 (parcial): submissao dentro da politica automatica aprova e mostra o vigente do Core junto do solicitado pendente', async ({
+    page,
+  }) => {
+    await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
+
+    await page.locator('.lista-clientes li .selecionar-cliente').first().click();
+
+    const atendimento = page.locator('.atendimento');
+    await expect(atendimento).toBeVisible();
+
+    const contas = atendimento.locator('.lista-contas .conta');
+    await expect(contas.nth(1)).toBeVisible();
+    await contas.nth(1).click();
+
+    const limiteInicial = atendimento.locator('.limite-vigente .valor');
+    await expect(limiteInicial).toHaveText(/R\$\s*1\.200,00/);
+
+    const formulario = atendimento.locator('.solicitacao-aumento-limite');
+    await expect(formulario).toBeVisible();
+    await formulario.locator('.limite-solicitado').fill('2000,00');
+    await formulario.locator('button[type=submit]').click();
+
+    const decisao = atendimento.locator('.decisao');
+    await expect(decisao).toBeVisible();
+    await expect(decisao).toHaveClass(/aprovada/);
+    await expect(decisao.locator('.status-solicitacao')).toContainText('AGUARDANDO_EFETIVACAO');
+
+    // O vigente confirmado pelo Core continua sendo o ANTIGO -- o solicitado aparece marcado
+    // como pendente, nunca substituindo o vigente antes da confirmacao autoritativa (AC29).
+    await expect(decisao.locator('.limite-vigente-confirmado')).toHaveText(/R\$\s*1\.200,00/);
+    await expect(decisao.locator('.limite-pendente')).toContainText(/R\$\s*2\.000,00/);
+    await expect(decisao.locator('.limite-pendente')).toContainText('aguardando confirmacao do Core');
   });
 });

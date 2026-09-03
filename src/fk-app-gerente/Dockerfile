@@ -15,4 +15,4 @@ FROM nginx:alpine
 COPY --from=build /workspace/dist/fk-app-gerente/browser /usr/share/nginx/html
 COPY src/fk-app-gerente/nginx.conf /etc/nginx/nginx.conf
 
-EXPOSE 80 443
+EXPOSE 4200

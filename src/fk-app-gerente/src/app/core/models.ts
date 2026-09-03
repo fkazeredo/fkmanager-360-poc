@@ -39,3 +39,60 @@ export interface Atendimento {
 export interface Session {
   gerenteId: string;
 }
+
+export type CanalManifestacao = 'PRESENCIAL' | 'TELEFONE' | 'CANAL_DIGITAL';
+
+export interface ManifestacaoCliente {
+  canalManifestacao: CanalManifestacao;
+  observacao?: string;
+}
+
+/**
+ * O comando de submissao (spec, secao "Submissao da SolicitacaoAumentoLimite"; plano #0003,
+ * secao 9). Valores monetarios em centavos, inteiro (ADR-0005) -- nunca ponto flutuante em
+ * nenhuma camada, e por isso o Angular nunca gera este valor com parseFloat.
+ */
+export interface SolicitacaoAumentoLimiteComando {
+  limiteSolicitado: number;
+  limiteVigenteVisto: number;
+  manifestacaoCliente: ManifestacaoCliente;
+}
+
+export interface DecisaoCredito {
+  resultado: 'APROVADA' | 'REJEITADA';
+  motivo:
+    | 'DENTRO_DA_POLITICA_AUTOMATICA'
+    | 'CONTA_NAO_ELEGIVEL'
+    | 'PERFIL_RISCO_INCOMPATIVEL'
+    | 'FORA_DA_POLITICA_AUTOMATICA';
+  versaoPoliticaCredito: string;
+  decididaEm: string;
+}
+
+/**
+ * O que fk-servico-credito devolve na submissao, atravessado intacto pelo bff-gerente (proxy puro,
+ * sem desserializacao no meio). `limiteSolicitadoPendenteDeEfetivacao` -- presenca E a pendencia
+ * (plano #0003): AUSENTE do JSON quando nao ha pendencia (REJEITADA), presente e igual ao
+ * limiteSolicitado quando ha (AGUARDANDO_EFETIVACAO). Nunca testar por truthiness -- `0` seria um
+ * valor pendente legitimo e um teste de truthiness o trataria como ausente.
+ */
+export interface SolicitacaoAumentoLimiteResultado {
+  solicitacaoId: string;
+  contaId: string;
+  status: string;
+  limiteChequeEspecialVigente: number;
+  limiteSolicitado: number;
+  limiteSolicitadoPendenteDeEfetivacao?: number;
+  decisao: DecisaoCredito;
+  registradaEm: string;
+}
+
+/**
+ * Envelope publico de erro do bff-gerente ({status, codigo}). `codigo` pode estar ausente -- caso
+ * de servico-carteira-clientes em 403/404, que nao publica codigo (ver GlobalExceptionHandler do
+ * BFF).
+ */
+export interface EnvelopeErroPublico {
+  status: number;
+  codigo?: string;
+}

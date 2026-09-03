@@ -37,7 +37,12 @@ class AutorizacaoEndToEndTest {
 
     private static final String CLIENT_ID = "bff-gerente";
     private static final String CLIENT_SECRET = "troque-este-client-secret";
-    private static final String REDIRECT_URI = "https://localhost/bff/login/oauth2/code/servidor-autorizacao";
+    // Precisa bater EXATAMENTE com o default de servidor-autorizacao.bff-client.redirect-uri em
+    // application.yml: Spring Authorization Server compara redirect_uri por string completa
+    // (scheme + host + porta + path), entao a porta 4200 -- que o app-gerente passou a publicar
+    // (ADR-0023) -- faz parte da chave. Divergir aqui reprova os 13 testes de uma vez, e foi
+    // exatamente o que aconteceu ao mudar a porta sem atualizar esta constante.
+    private static final String REDIRECT_URI = "https://localhost:4200/bff/login/oauth2/code/servidor-autorizacao";
     private static final String CREDITO_CLIENT_ID = "servico-credito";
     private static final String CREDITO_CLIENT_SECRET = "troque-este-client-secret";
 

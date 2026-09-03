@@ -38,6 +38,12 @@
         <maven.compiler.release>25</maven.compiler.release>
         <spring-boot.version>4.1.1</spring-boot.version>
         <archunit.version>1.5.0</archunit.version>
+        <!--
+            Espelha a versao que spring-boot-dependencies ja gerencia. Nao e uma escolha
+            independente: existe so porque annotationProcessorPaths exige uma versao literal,
+            e o dependencyManagement do BOM nao alcanca aquela secao do compiler plugin.
+        -->
+        <lombok.version>1.18.46</lombok.version>
     </properties>
 
     <dependencyManagement>
@@ -72,12 +78,27 @@
                         </execution>
                     </executions>
                 </plugin>
+                <!--
+                    Lombok e processador de anotacao, e por isso precisa estar em
+                    annotationProcessorPaths, nao so no classpath: a partir do momento em que
+                    outro processador entrar no build, a lista explicita e o que garante ordem
+                    e presenca (o default "descobre pelo classpath" deixa de valer assim que
+                    esta secao existe). A versao vem do BOM do Spring Boot (1.18.46), que
+                    suporta JDK 25 desde a 1.18.40; nao pinamos versao propria.
+                -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <configuration>
                         <release>${maven.compiler.release}</release>
                         <parameters>true</parameters>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
                 <plugin>

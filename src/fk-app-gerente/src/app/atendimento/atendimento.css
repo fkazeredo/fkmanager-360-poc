@@ -55,3 +55,45 @@
 .erro {
   color: #b00020;
 }
+
+.solicitacao-aumento-limite {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.solicitacao-aumento-limite label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.erro-submissao {
+  color: #b00020;
+  margin-top: 0.75rem;
+}
+
+.decisao {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.decisao.aprovada {
+  border-color: #0b6;
+}
+
+.decisao.rejeitada {
+  border-color: #b00020;
+}
+
+.limite-pendente .rotulo-pendente {
+  font-size: 0.85rem;
+  color: #555;
+  margin-left: 0.5rem;
+}

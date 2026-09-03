@@ -2,6 +2,7 @@ package com.fkmanager360.bffgerente.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
@@ -15,13 +16,10 @@ import org.springframework.stereotype.Component;
  * significaria mandar o token errado para o destino errado.
  */
 @Component
+@RequiredArgsConstructor
 public class DelegatedTokenResolver {
 
     private final OAuth2AuthorizedClientManager authorizedClientManager;
-
-    public DelegatedTokenResolver(OAuth2AuthorizedClientManager authorizedClientManager) {
-        this.authorizedClientManager = authorizedClientManager;
-    }
 
     public String tokenPara(
             String registrationId,

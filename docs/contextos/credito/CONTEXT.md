@@ -13,11 +13,13 @@ política, decisão, alçada e efetivação. É o **dono semântico do LimiteChe
 no CoreLegado, pela sua própria ACL, as informações de crédito de que precisa (ADR-0004).
 
 O glossário abaixo é o vocabulário **completo** do contexto, e não apenas o que já existe em
-código: ele descreve o domínio que a spec do slice 1 exercita inteiro. O que #0002 materializou é
-a fatia da leitura — `LimiteChequeEspecialVigente`, `DadosCreditoCore`,
-`ClassificacaoRiscoCreditoBase` e a `situacaoConta` —, e `fk-servico-credito` nasceu
-deliberadamente **sem persistência**, porque ainda não há estado durável de Credito (ADR-0010,
-ADR-0014). `credito_db` nasce com a `SolicitacaoAumentoLimite`.
+código: ele descreve o domínio que a spec do slice 1 exercita inteiro. #0002 materializou a fatia
+da leitura — `LimiteChequeEspecialVigente`, `DadosCreditoCore`, `ClassificacaoRiscoCreditoBase` e a
+`situacaoConta` —, e `fk-servico-credito` nasceu deliberadamente **sem persistência**, porque ainda
+não havia estado durável de Credito (ADR-0010, ADR-0014). #0003 materializou o primeiro
+comportamento com estado durável — `credito_db`, a submissão da `SolicitacaoAumentoLimite`, o
+congelamento do `ContextoDecisaoCredito` e a decisão automática da `PoliticaCredito v1` —, deixando
+a efetivação em si (dispatcher, callback, reconciliação) para #0004+.
 
 
 **LimiteChequeEspecial**:
@@ -76,6 +78,19 @@ recuperável — um callback ou uma consulta posterior o conclui em EFETIVADA ou
 contrário é FALHA_EFETIVACAO, que exige evidência autoritativa de que a efetivação não ocorreu
 (ADR-0009).
 _Evitar_: FALHA_EFETIVACAO para ausência de resposta, Timeout, Pendente, Em processamento
+
+**Histórico funcional**:
+Trilha append-only por SolicitacaoAumentoLimite (tabela `historico_solicitacao`), cada linha uma
+EntradaHistorico com um TipoFatoHistorico, o AtorOperacao responsável e o instante do fato. Explica
+como se chegou ao estado atual; **não** é Event Sourcing, não é Kafka, não é servico-auditoria e
+não reconstrói o agregado — o estado atual continua persistido pelo modelo normal
+(SolicitacaoAumentoLimite, ContextoDecisaoCredito, DecisaoCredito). Cada entrada tem identidade
+estável derivada do fato causador, suficiente para deduplicar sob replay/redelivery: o mesmo fato
+lógico nunca produz uma segunda entrada. #0003 registra `SOLICITACAO_REGISTRADA` e
+`DECISAO_AUTOMATICA_REGISTRADA`; os fatos de efetivação (`EFETIVACAO_SOLICITADA` e demais)
+pertencem a #0004+, pela mesma regra que rege StatusSolicitacaoAumentoLimite (ADR-0010): o
+vocabulário técnico só nasce quando o comportamento que o produz existe.
+_Evitar_: Event Sourcing, Auditoria, Log de eventos, Reconstrução do agregado
 
 **ContextoDecisaoCredito**:
 Fotografia imutável dos fatos considerados no momento da submissão, junto com a

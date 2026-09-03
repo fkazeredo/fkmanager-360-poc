@@ -18,18 +18,21 @@ import java.util.Set;
 
 /**
  * Os clients da plataforma. Scopes sao capacidades grossas -- {@code carteira.leitura},
- * {@code credito.leitura} -- e nunca politica de negocio: {@code credito.aprovar-ate-50000} nao
- * existe (ADR-0015).
+ * {@code credito.leitura}, {@code credito.escrita} -- e nunca politica de negocio: {@code
+ * credito.aprovar-ate-50000} nao existe (ADR-0015).
  *
  * <p><b>A cadeia de delegacao, declarada por inteiro.</b> O gerente entra pelo bff-gerente com
- * {@code openid carteira.leitura credito.leitura}. O BFF troca por um token para cada Resource
- * Server: {@code aud = servico-carteira-clientes} com {@code carteira.leitura}, e
- * {@code aud = servico-credito} com {@code credito.leitura carteira.leitura}. Ao continuar a
- * operacao em nome do usuario, servico-credito troca <b>de novo</b>, pedindo apenas
- * {@code carteira.leitura} -- a segunda perna estreita capability em vez de ganhar capability
- * nova, e o registro abaixo torna isso estrutural: o unico scope que servico-credito conhece e
- * {@code carteira.leitura}, entao nem formular um pedido mais amplo e possivel. A verificacao
- * complementar, de que nada pedido excede o que o subject token ja tinha, esta em
+ * {@code openid carteira.leitura credito.leitura credito.escrita}. O BFF troca por um token
+ * DISTINTO por OPERACAO contra {@code servico-credito} -- least privilege por operacao (plano
+ * #0003, secao 9): {@code aud = servico-credito} com {@code credito.leitura carteira.leitura}
+ * para o GET do limite vigente, e {@code aud = servico-credito} com
+ * {@code credito.escrita carteira.leitura} para o POST de submissao; e
+ * {@code aud = servico-carteira-clientes} com {@code carteira.leitura} para a listagem/atendimento
+ * da carteira. Ao continuar a operacao em nome do usuario, servico-credito troca <b>de novo</b>,
+ * pedindo apenas {@code carteira.leitura} -- a segunda perna estreita capability em vez de ganhar
+ * capability nova, e o registro abaixo torna isso estrutural: o unico scope que servico-credito
+ * conhece e {@code carteira.leitura}, entao nem formular um pedido mais amplo e possivel. A
+ * verificacao complementar, de que nada pedido excede o que o subject token ja tinha, esta em
  * {@link TokenExchangePolicyAuthenticationProvider}.
  */
 @Configuration
@@ -37,6 +40,7 @@ public class RegisteredClientsConfig {
 
     static final String SCOPE_CARTEIRA_LEITURA = "carteira.leitura";
     static final String SCOPE_CREDITO_LEITURA = "credito.leitura";
+    static final String SCOPE_CREDITO_ESCRITA = "credito.escrita";
 
     static final String AUD_CARTEIRA_CLIENTES = "servico-carteira-clientes";
     static final String AUD_CREDITO = "servico-credito";
@@ -64,6 +68,7 @@ public class RegisteredClientsConfig {
                 .scope(OidcScopes.PROFILE)
                 .scope(SCOPE_CARTEIRA_LEITURA)
                 .scope(SCOPE_CREDITO_LEITURA)
+                .scope(SCOPE_CREDITO_ESCRITA)
                 .clientSettings(ClientSettings.builder()
                         // PKCE obrigatorio: sem isto, o ticket nao terminou.
                         .requireProofKey(true)

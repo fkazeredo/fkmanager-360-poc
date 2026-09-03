@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -23,10 +24,16 @@ import org.springframework.security.web.access.expression.WebExpressionAuthoriza
  * ao bff-gerente, ADR-0015). CSRF fica desligado deliberadamente -- protege contra forjar
  * requisicao autenticada por cookie, e este servico nao autentica por cookie.
  *
- * <p>Scope e papel continuam sendo perguntas distintas: {@code credito.leitura} diz que aquela
- * identidade pode tentar a capacidade de leitura de credito; {@code GERENTE_RELACIONAMENTO} e o
- * que este endpoint exige. Nenhum scope codifica politica de credito -- {@code
- * credito.aprovar-ate-50000} nao existe e nao vai existir (ADR-0015).
+ * <p>Scope e papel continuam sendo perguntas distintas: {@code credito.leitura}/{@code
+ * credito.escrita} dizem que aquela identidade pode tentar a capacidade de leitura/escrita de
+ * credito; {@code GERENTE_RELACIONAMENTO} e o que os dois endpoints exigem. Nenhum scope codifica
+ * politica de credito -- {@code credito.aprovar-ate-50000} nao existe e nao vai existir
+ * (ADR-0015).
+ *
+ * <p>Least privilege por operacao (plano #0003, secao 9): o {@code GET} do limite vigente exige
+ * {@code credito.leitura} e o {@code POST} de submissao exige {@code credito.escrita} -- um token
+ * com so um dos dois e recusado no endpoint do outro (403), mesmo carregando
+ * {@code GERENTE_RELACIONAMENTO}.
  */
 @Configuration
 @EnableWebSecurity
@@ -40,8 +47,12 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers("/clientes/**").access(new WebExpressionAuthorizationManager(
-                                "hasAuthority('SCOPE_credito.leitura') and hasRole('GERENTE_RELACIONAMENTO')"))
+                        .requestMatchers(HttpMethod.GET, "/clientes/*/contas/*/limite-cheque-especial-vigente")
+                                .access(new WebExpressionAuthorizationManager(
+                                        "hasAuthority('SCOPE_credito.leitura') and hasRole('GERENTE_RELACIONAMENTO')"))
+                        .requestMatchers(HttpMethod.POST, "/clientes/*/contas/*/solicitacoes-aumento-limite")
+                                .access(new WebExpressionAuthorizationManager(
+                                        "hasAuthority('SCOPE_credito.escrita') and hasRole('GERENTE_RELACIONAMENTO')"))
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
 

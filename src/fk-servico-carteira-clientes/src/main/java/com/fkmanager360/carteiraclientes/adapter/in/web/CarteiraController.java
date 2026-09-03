@@ -3,6 +3,7 @@ package com.fkmanager360.carteiraclientes.adapter.in.web;
 import com.fkmanager360.carteiraclientes.application.usecase.ListarClientesDaCarteira;
 import com.fkmanager360.carteiraclientes.domain.GerenteId;
 import com.fkmanager360.carteiraclientes.domain.Pagination;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,13 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
  * (ADR-0007).
  */
 @RestController
+@RequiredArgsConstructor
 public class CarteiraController {
 
     private final ListarClientesDaCarteira listarClientesDaCarteira;
-
-    public CarteiraController(ListarClientesDaCarteira listarClientesDaCarteira) {
-        this.listarClientesDaCarteira = listarClientesDaCarteira;
-    }
 
     @GetMapping("/carteira/clientes")
     ClientesPageResponse listar(

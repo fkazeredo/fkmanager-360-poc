@@ -43,5 +43,70 @@
         para a conta {{ dados.conta.contaId }} de {{ dados.cliente.nome }}
       </span>
     </div>
+
+    <form class="solicitacao-aumento-limite" (submit)="onFormSubmit($event)">
+      <h3>Solicitar aumento de limite</h3>
+
+      <label>
+        Canal da manifestacao
+        <select
+          class="canal-manifestacao"
+          [value]="canalManifestacao()"
+          (change)="onCanalManifestacaoChange($any($event.target).value)">
+          <option value="PRESENCIAL">Presencial</option>
+          <option value="TELEFONE">Telefone</option>
+          <option value="CANAL_DIGITAL">Canal digital</option>
+        </select>
+      </label>
+
+      <label>
+        Observacao (opcional)
+        <textarea
+          class="observacao"
+          maxlength="500"
+          [value]="observacao()"
+          (input)="onObservacaoChange($any($event.target).value)"></textarea>
+      </label>
+
+      <label>
+        Limite solicitado (R$)
+        <input
+          type="text"
+          class="limite-solicitado"
+          inputmode="decimal"
+          placeholder="0,00"
+          [value]="limiteSolicitadoReais()"
+          (input)="onLimiteSolicitadoChange($any($event.target).value)" />
+      </label>
+
+      <button type="submit" [disabled]="enviando() || formularioBloqueado()">
+        {{ enviando() ? 'Enviando...' : 'Solicitar aumento' }}
+      </button>
+    </form>
+
+    @if (erroSubmissao()) {
+      <p class="erro-submissao">{{ erroSubmissao() }}</p>
+    }
+
+    @if (resultadoSubmissao(); as resultado) {
+      <div
+        class="decisao"
+        [class.aprovada]="resultado.decisao.resultado === 'APROVADA'"
+        [class.rejeitada]="resultado.decisao.resultado === 'REJEITADA'">
+        <p class="mensagem-decisao">{{ mensagemDecisaoExibida() }}</p>
+        <dl>
+          <dt>Limite vigente (confirmado pelo Core)</dt>
+          <dd class="limite-vigente-confirmado">{{ limiteVigenteConfirmadoFormatado() }}</dd>
+          @if (resultado.limiteSolicitadoPendenteDeEfetivacao !== undefined) {
+            <dt>Limite solicitado</dt>
+            <dd class="limite-pendente">
+              {{ limitePendenteFormatado() }}
+              <span class="rotulo-pendente">aguardando confirmacao do Core</span>
+            </dd>
+          }
+        </dl>
+        <p class="status-solicitacao">Status: {{ resultado.status }}</p>
+      </div>
+    }
   }
 </section>

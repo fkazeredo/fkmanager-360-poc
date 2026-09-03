@@ -7,6 +7,7 @@ import com.fkmanager360.credito.domain.ContaId;
 import com.fkmanager360.credito.domain.DadosCreditoCore;
 import com.fkmanager360.credito.domain.LimiteChequeEspecialVigente;
 import com.fkmanager360.credito.domain.SituacaoConta;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -36,6 +37,7 @@ import java.util.Optional;
  * materializar o ContextoDecisaoCredito, com o campo entrando por escolha e nao por vazamento.
  */
 @Component
+@RequiredArgsConstructor
 public class CreditoLegadoAclAdapter implements DadosCreditoCorePort {
 
     /** Identificacao logica da fonte -- nunca URL, host ou porta (procedencia e de negocio). */
@@ -52,13 +54,10 @@ public class CreditoLegadoAclAdapter implements DadosCreditoCorePort {
     private static final DateTimeFormatter DATA_HOST =
             DateTimeFormatter.ofPattern("uuuuMMdd").withResolverStyle(ResolverStyle.STRICT);
 
+    @Qualifier("coreLegadoRestClient")
     private final RestClient restClient;
-    private final Clock clock;
 
-    public CreditoLegadoAclAdapter(@Qualifier("coreLegadoRestClient") RestClient restClient, Clock clock) {
-        this.restClient = restClient;
-        this.clock = clock;
-    }
+    private final Clock clock;
 
     @Override
     public Optional<DadosCreditoCore> consultar(ContaId contaId) {

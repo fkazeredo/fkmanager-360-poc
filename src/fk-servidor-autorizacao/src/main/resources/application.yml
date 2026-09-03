@@ -13,8 +13,8 @@ servidor-autorizacao:
   bff-client:
     client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
     client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
-    redirect-uri: ${AUTH_SERVER_BFF_REDIRECT_URI:https://localhost/bff/login/oauth2/code/servidor-autorizacao}
-    post-logout-redirect-uri: ${AUTH_SERVER_BFF_POST_LOGOUT_REDIRECT_URI:https://localhost/}
+    redirect-uri: ${AUTH_SERVER_BFF_REDIRECT_URI:https://localhost:4200/bff/login/oauth2/code/servidor-autorizacao}
+    post-logout-redirect-uri: ${AUTH_SERVER_BFF_POST_LOGOUT_REDIRECT_URI:https://localhost:4200/}
   # Client de servico-credito, usado somente para o Token Exchange encadeado contra
   # servico-carteira-clientes (ADR-0015). Identidade propria por deployable chamador.
   credito-client:
