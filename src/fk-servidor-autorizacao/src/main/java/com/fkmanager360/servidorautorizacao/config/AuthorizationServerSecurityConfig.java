@@ -59,8 +59,12 @@ public class AuthorizationServerSecurityConfig {
     @Bean
     @Order(Ordered.LOWEST_PRECEDENCE - 5)
     SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+        // loginPage("/login") aponta para LoginPageController (pagina no design system da
+        // plataforma, ticket #0008) no MESMO caminho da pagina que o Spring Security gerava --
+        // nada muda para o fluxo OIDC nem para o nginx, so a renderizacao. permitAll() libera o
+        // GET da pagina e o POST de processamento para quem ainda nao tem sessao.
         http.authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
-                .formLogin(Customizer.withDefaults());
+                .formLogin(login -> login.loginPage("/login").permitAll());
 
         return http.build();
     }

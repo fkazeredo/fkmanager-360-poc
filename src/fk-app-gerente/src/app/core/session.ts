@@ -32,9 +32,13 @@ export class SessionService {
     window.location.href = '/bff/oauth2/authorization/servidor-autorizacao';
   }
 
+  /**
+   * O BFF devolve a URL de end-session do servidor-autorizacao (RP-Initiated Logout): navegar
+   * ate la encerra tambem a sessao SSO -- sem isso, "Entrar" logava de volta sem pedir senha.
+   */
   logout(): void {
-    this.http.post('/bff/logout', null).subscribe({
-      next: () => window.location.assign('/'),
+    this.http.post<{ redirectUrl?: string }>('/bff/logout', null).subscribe({
+      next: (resposta) => window.location.assign(resposta?.redirectUrl ?? '/'),
       error: () => window.location.assign('/'),
     });
   }

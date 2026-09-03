@@ -41,6 +41,27 @@
   text-align: center;
 }
 
+.busca-clientes {
+  width: 100%;
+  font: inherit;
+  color: var(--tinta-900);
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pilula);
+  padding: 0.5rem 1rem;
+  margin-bottom: 0.625rem;
+  transition:
+    border-color var(--transicao),
+    box-shadow var(--transicao);
+}
+
+.busca-clientes:focus {
+  outline: none;
+  background: var(--superficie);
+  border-color: var(--marca-600);
+  box-shadow: 0 0 0 3px var(--marca-100);
+}
+
 .lista-clientes {
   display: flex;
   flex-direction: column;
@@ -53,6 +74,7 @@
   align-items: center;
   gap: 0.75rem;
   width: 100%;
+  min-height: 2.75rem; /* alvo de toque >= 44px */
   padding: 0.625rem 0.75rem;
   border-radius: var(--raio);
   text-align: left;

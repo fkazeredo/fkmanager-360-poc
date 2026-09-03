@@ -1,6 +1,9 @@
 package com.fkmanager360.bffgerente.config;
 
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -29,7 +32,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * (AC19, AC20). O fluxo completo de login contra um servidor-autorizacao real e
  * responsabilidade do S7/Playwright (ADR-0018: S7 prova que a topologia fecha) -- aqui a
  * fronteira e a seguranca deste proprio servico.
+ *
+ * <p><b>A ordem dos metodos e CONTRATO, nao estetica.</b> O post-processor
+ * {@code SecurityMockMvcRequestPostProcessors.csrf()} nao age so no request: via
+ * {@code WebTestUtils.setCsrfTokenRepository}, ele substitui o repositorio DO CsrfFilter
+ * COMPARTILHADO do contexto por um {@code TestCsrfTokenRepository} (que guarda o token na
+ * sessao) -- e essa troca vale para todos os requests seguintes ate o contexto morrer. Depois
+ * do primeiro teste que usa {@code csrf()}, nenhum request emite mais o cookie XSRF-TOKEN real
+ * (e qualquer request passa a criar sessao). Por isso os testes que assertam emissao de cookie
+ * rodam PRIMEIRO ({@code @Order} baixo) e os que usam {@code csrf()} rodam POR ULTIMO. A ordem
+ * default do JUnit e um hash dos nomes: renomear ou acrescentar um metodo reembaralha tudo, que
+ * foi exatamente como esta mina (latente desde #0001) foi descoberta no #0008.
  */
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @Testcontainers
 @SpringBootTest(
         // RANDOM_PORT (nao MOCK): o serializer de cookie do Spring Session so aplica
@@ -66,12 +81,14 @@ class BffSegurancaTest {
     private RedisConnectionFactory redisConnectionFactory;
 
     @Test
+    @Order(3)
     void api_semAutenticacao_e401_naoRedirecionaParaHtml() throws Exception {
         mockMvc.perform(get("/api/sessao"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
+    @Order(4)
     void api_comSessaoAutenticada_retornaGerenteId() throws Exception {
         // Regressao: o controller resolvia o OidcUser por injecao implicita de parametro (sem
         // @AuthenticationPrincipal), o que o MVC trata como model attribute a construir por
@@ -85,6 +102,7 @@ class BffSegurancaTest {
     }
 
     @Test
+    @Order(7)
     void logout_semTokenCsrf_eRecusado() throws Exception {
         mockMvc.perform(post("/logout")
                         .with(SecurityMockMvcRequestPostProcessors.user("gerente.a")))
@@ -92,14 +110,34 @@ class BffSegurancaTest {
     }
 
     @Test
-    void logout_comTokenCsrf_eAceito() throws Exception {
+    @Order(8) // csrf() troca o repositorio do CsrfFilter para o resto do contexto: por ultimo
+    void logout_comTokenCsrf_eAceito_eDevolveDestinoDeNavegacao() throws Exception {
+        // Sem OidcUser (sessao sem id_token), nao ha SSO a encerrar: o destino e a origem publica.
         mockMvc.perform(post("/logout")
                         .with(SecurityMockMvcRequestPostProcessors.user("gerente.a"))
                         .with(SecurityMockMvcRequestPostProcessors.csrf()))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.redirectUrl").isNotEmpty());
     }
 
     @Test
+    @Order(9) // csrf() troca o repositorio do CsrfFilter para o resto do contexto: por ultimo
+    void logout_comSessaoOidc_devolveEndSessionComIdTokenHint() throws Exception {
+        // RP-Initiated Logout: "Sair" precisa encerrar tambem a sessao SSO no servidor-autorizacao,
+        // senao "Entrar" loga de volta sem pedir senha. A SPA navega ate a URL devolvida.
+        mockMvc.perform(post("/logout")
+                        .with(SecurityMockMvcRequestPostProcessors.oidcLogin()
+                                .idToken(token -> token.subject("gerente.a")))
+                        .with(SecurityMockMvcRequestPostProcessors.csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.redirectUrl").value(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("/connect/logout"),
+                        org.hamcrest.Matchers.containsString("id_token_hint="),
+                        org.hamcrest.Matchers.containsString("post_logout_redirect_uri="))));
+    }
+
+    @Test
+    @Order(5)
     void loginInicial_forcaPkce_mesmoSendoClientConfidencial() throws Exception {
         MvcResult resultado = mockMvc.perform(get("/oauth2/authorization/servidor-autorizacao"))
                 .andExpect(status().is3xxRedirection())
@@ -110,6 +148,7 @@ class BffSegurancaTest {
     }
 
     @Test
+    @Order(6)
     void sessao_ePersistidaEmRedis_naoEmMemoriaLocal() throws Exception {
         MvcResult resultado = mockMvc.perform(get("/actuator/health")).andReturn();
         var sessao = resultado.getRequest().getSession(false);
@@ -122,6 +161,7 @@ class BffSegurancaTest {
     }
 
     @Test
+    @Order(1) // antes de qualquer csrf(): ver javadoc da classe
     void requisicaoQualquer_emiteCookieXsrfTokenComPathRaiz() throws Exception {
         // Regressao 1: CsrfFilter resolve o token via Supplier adiado -- sem algo que force essa
         // resolucao, o cookie XSRF-TOKEN nunca e escrito numa API pura (sem view server-side
@@ -135,13 +175,16 @@ class BffSegurancaTest {
         // asercao).
         MvcResult resultado = mockMvc.perform(get("/actuator/health")).andReturn();
 
-        String setCookie = resultado.getResponse().getHeader(HttpHeaders.SET_COOKIE);
-        assertThat(setCookie).isNotNull();
-        assertThat(setCookie).contains("XSRF-TOKEN=").contains("Path=/");
-        assertThat(setCookie).doesNotContain("Path=/bff");
+        // TODOS os Set-Cookie, nao so o primeiro: a resposta pode carregar tambem o cookie
+        // SESSION (Spring Session), e a ordem dos headers nao e contrato.
+        var setCookies = resultado.getResponse().getHeaders(HttpHeaders.SET_COOKIE);
+        assertThat(setCookies)
+                .anyMatch(cookie -> cookie.contains("XSRF-TOKEN=") && cookie.contains("Path=/"));
+        assertThat(setCookies).noneMatch(cookie -> cookie.contains("Path=/bff"));
     }
 
     @Test
+    @Order(2)
     void cookieDeSessao_eHttpOnlyComSameSiteLax() throws Exception {
         MvcResult resultado = mockMvc.perform(get("/oauth2/authorization/servidor-autorizacao"))
                 .andReturn();
