@@ -217,3 +217,80 @@ foi reconstruída do zero (`down -v` + `up --build`) e a suíte inteira rodou ve
 reaproveitar estado de uma tentativa anterior.
 
 **Status nesta data: aguardando code review.**
+
+### 2026-09-03 — franklin.azeredo
+
+Refactoring arquitetural transversal, decidido pelo Owner e aplicado sobre o estado acumulado de
+#0001, #0002 e #0003 **antes** do code review. Não é rewrite: nenhum Acceptance Criteria, contrato,
+transação, invariante de concorrência ou comportamento observável mudou. O objeto é infraestrutura.
+
+**A fronteira que define o refactor.** `domain/**` e `application/**` ficaram byte-idênticos nos dois
+serviços — verificado por `git diff` vazio nesses caminhos ao final. As ports são o contrato
+congelado: `SolicitacoesAumentoLimitePort`, `RegistroIdempotenciaPort` e `VinculosCarteiraPort`
+mantêm nome, pacote e assinatura. Uma versão anterior do plano propunha fundir as duas primeiras num
+`CreditoPersistencePort`; o Owner vetou — *"em nenhum momento pedi pra invadir o hexágono, pedi pra
+usar JPA e Lombok e mudar uma porta"* —, e a fusão foi retirada. O efeito colateral é o melhor
+oráculo disponível: todos os testes S1/S2 compilaram e passaram sem uma linha de edição.
+
+**JPA como padrão, com os testes decidindo onde ele não serve.** `CarteiraClientes` trocou dois
+SQLs manuais por `existsByGerenteIdAndClienteId` e `findByGerenteIdOrderByIdAsc(Pageable)` — query
+derivation pura, nenhum SQL restante. `Credito` ganhou seis `@Entity`, cinco repositories e um
+fragment transacional. TX1 foi implementado primeiro em JPA e submetido imediatamente aos S3 de
+concorrência, conforme a instrução do Owner de não pré-decidir a tecnologia: **passou de primeira**
+nas três corridas reais e nos testes de replay, e o resultado é mais legível que o JDBC anterior —
+quatro blocos de `persist`+`flush`, sem bind manual de parâmetro. TX1 fica JPA.
+
+Duas descobertas que só apareceram por rodar os S3 contra PostgreSQL real, e que teriam passado
+despercebidas com mock: `repository.save()` é ambíguo para as três entidades cujo identificador é
+atribuído pela aplicação antes do save (a detecção de "entity nova" do Spring Data olha se o `@Id` é
+nulo, e não é — `save()` viraria `merge()`, com um SELECT redundante no trecho mais sensível de TX1);
+e a tradução de exceção exige o estereótipo `@Repository`, não `@Component` — sem ele,
+`ConstraintViolationException` bruta do Hibernate escaparia em vez de
+`DataIntegrityViolationException`, quebrando silenciosamente o `catch` que é o guardrail inteiro de
+TX1.
+
+**Onde SQL permaneceu, e por quê.** Uma única ocorrência: o `SELECT ... FOR UPDATE NOWAIT` de TX2,
+em `JdbcClient`. A razão é concreta e está documentada no ponto de uso — o comportamento de exceção
+foi verificado empiricamente (`55P03` chega como `UncategorizedSQLException`, não como
+`CannotAcquireLockException`), e trocar por `@Lock(PESSIMISTIC_WRITE)` mudaria o tipo devolvido pelo
+provider sem que nenhum teste de unidade percebesse. O lock é adquirido antes de qualquer escrita
+JPA na transação, então não há hazard de flush entre os dois mecanismos.
+
+**Lombok fora do hexágono.** Vinte classes em `adapter/**` e `config/**` receberam
+`@RequiredArgsConstructor` ou `@Slf4j`; entidades JPA usam `@Getter` + `@NoArgsConstructor(PROTECTED)`,
+nunca `@Data`. `domain/**` e `application/**` continuam sem Lombok, e isso deixou de ser convenção:
+`lombok.addLombokGeneratedAnnotation` marca cada membro gerado com `@lombok.Generated`, e uma regra
+ArchUnit por serviço falha se essa anotação aparecer dentro do hexágono. A regra foi mantida porque
+se provou falsificável de verdade — anotar temporariamente uma classe de `application/` deixa o build
+vermelho, o que foi verificado e revertido nos dois módulos.
+
+Um achado fora do inventário: `CarteiraClientesAdapter` resolvia seu `RestClient` por coincidência
+entre o nome do parâmetro do construtor e o nome do `@Bean`, num módulo que tem dois `RestClient`.
+`@RequiredArgsConstructor` gera o parâmetro com o nome do **campo**, o que teria quebrado essa
+resolução implícita em silêncio. Corrigido com `@Qualifier` explícito no campo — que
+`lombok.copyableAnnotations` propaga para o construtor gerado.
+
+**Frontend em `https://localhost:4200`.** nginx passou a publicar 4200 com TLS; o bloco `listen 80`
+saiu. Nenhuma mudança de arquitetura de segurança: same-origin, cookie `Secure`, CSRF, PKCE e Token
+Exchange idênticos — certificado X.509 nunca amarrou porta, então o mesmo `CN=localhost` serve. É
+HTTPS e não HTTP porque o AC19 prova `secure: true` no cookie de sessão contra a stack real; servir
+em HTTP puro seria regressão de garantia já provada. As três alternativas foram apresentadas ao Owner
+antes de qualquer alteração, e esta foi a escolhida.
+
+**Um contorno foi desfeito no caminho.** A migração deixou `@Lazy` em `CreditoPersistenceOperations`
+para que os testes S6 — que sobem o contexto sem `DataSource` — não tentassem instanciá-lo. Isso é
+código de produção moldado por setup de teste. Substituído por `@MockitoBean` do fragment nos dois
+testes S6: a exclusão pertence a quem escolheu subir sem banco.
+
+**Decisão registrada em ADR.** `docs/adr/0023-jpa-como-padrao-de-persistencia-lombok-fora-do-hexagono.md`
+fixa as três: Spring Data JPA como padrão com SQL como exceção justificada e documentada no ponto de
+uso; Lombok permitido fora do hexágono, sem `@Data` em entity; frontend local em 4200 sobre TLS.
+Flyway continua soberano (`ddl-auto: validate`, nunca `create`/`update`), `open-in-view: false`, e a
+separação de credenciais migrator/DML de ADR-0014 intacta.
+
+**Dívida deliberada.** O briefing original pedia também revisar "ports que são apenas wrappers de
+CRUD" e consolidá-las; o Owner restringiu o escopo depois, e a revisão não foi feita.
+`RegistroIdempotenciaPort` continua sendo uma port de leitura única — cabe reabrir, mas não cabia em
+"usar JPA e Lombok e mudar uma porta".
+
+**Status nesta data: aguardando code review, agora sobre o delta já refatorado.**

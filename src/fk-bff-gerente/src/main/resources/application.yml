@@ -88,7 +88,7 @@ server:
   servlet:
     context-path: /bff
   # Necessario atras do nginx (F7): sem isto, redirect_uri e cookies seriam computados a partir
-  # do host/porta interno do container, nao da origem publica https://localhost.
+  # do host/porta interno do container, nao da origem publica https://localhost:4200.
   forward-headers-strategy: framework
 
 management:
