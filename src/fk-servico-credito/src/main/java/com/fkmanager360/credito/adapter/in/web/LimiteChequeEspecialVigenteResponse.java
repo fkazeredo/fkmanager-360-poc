@@ -2,6 +2,7 @@ package com.fkmanager360.credito.adapter.in.web;
 
 import com.fkmanager360.credito.domain.ContaId;
 import com.fkmanager360.credito.domain.DadosCreditoCore;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
@@ -21,9 +22,10 @@ import java.time.Instant;
  * responde "este limite e de agora?". Nao e a data em que o host atualizou o limite.
  */
 record LimiteChequeEspecialVigenteResponse(
-        String contaId,
-        long limiteChequeEspecialVigente,
-        Instant consultadoEm) {
+        @Schema(example = "10001") String contaId,
+        @Schema(description = "Em centavos, inteiro (ADR-0005).", example = "500000") long limiteChequeEspecialVigente,
+        @Schema(description = "Instante em que esta plataforma capturou os fatos do CoreLegado -- "
+                + "nunca a data em que o host atualizou o limite.", example = "2026-09-02T16:00:00Z") Instant consultadoEm) {
 
     static LimiteChequeEspecialVigenteResponse de(ContaId contaId, DadosCreditoCore dados) {
         return new LimiteChequeEspecialVigenteResponse(

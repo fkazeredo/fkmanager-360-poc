@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fkmanager360.credito.application.ResultadoSubmissao;
 import com.fkmanager360.credito.domain.DecisaoCredito;
 import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
@@ -23,16 +24,28 @@ import java.time.Instant;
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 record SolicitacaoAumentoLimiteResponse(
-        String solicitacaoId,
-        String contaId,
-        String status,
-        long limiteChequeEspecialVigente,
-        long limiteSolicitado,
-        Long limiteSolicitadoPendenteDeEfetivacao,
+        @Schema(format = "uuid") String solicitacaoId,
+        @Schema(example = "10001") String contaId,
+        @Schema(description = "Neste ticket a decisao automatica sempre ocorre na mesma resposta, "
+                + "entao so AGUARDANDO_EFETIVACAO e REJEITADA sao alcancaveis aqui.",
+                allowableValues = {"AGUARDANDO_EFETIVACAO", "REJEITADA"}) String status,
+        @Schema(description = "O vigente CONFIRMADO pelo CoreLegado e congelado no contexto -- "
+                + "nunca o solicitado. Em centavos.", example = "500000") long limiteChequeEspecialVigente,
+        @Schema(example = "600000") long limiteSolicitado,
+        @Schema(description = "PRESENCA e a pendencia: presente e igual a limiteSolicitado quando "
+                + "status=AGUARDANDO_EFETIVACAO; ausente do JSON quando REJEITADA. Nao e booleano.",
+                example = "600000", nullable = true) Long limiteSolicitadoPendenteDeEfetivacao,
         DecisaoResponse decisao,
         Instant registradaEm) {
 
-    record DecisaoResponse(String resultado, String motivo, String versaoPoliticaCredito, Instant decididaEm) {
+    record DecisaoResponse(
+            @Schema(allowableValues = {"APROVADA", "REJEITADA"}) String resultado,
+            @Schema(description = "Codigo estavel do dominio, nunca frase de interface. "
+                    + "PERFIL_RISCO_INCOMPATIVEL nunca expoe a classificacao de risco bruta.",
+                    allowableValues = {"CONTA_NAO_ELEGIVEL", "PERFIL_RISCO_INCOMPATIVEL",
+                            "DENTRO_DA_POLITICA_AUTOMATICA", "FORA_DA_POLITICA_AUTOMATICA"}) String motivo,
+            @Schema(example = "v1") String versaoPoliticaCredito,
+            Instant decididaEm) {
 
         static DecisaoResponse de(DecisaoCredito decisao) {
             return new DecisaoResponse(
