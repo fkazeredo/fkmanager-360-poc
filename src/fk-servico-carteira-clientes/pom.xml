@@ -25,6 +25,7 @@
 
     <properties>
         <wiremock.version>3.13.2</wiremock.version>
+        <springdoc.version>3.0.0</springdoc.version>
     </properties>
 
     <!--
@@ -102,6 +103,16 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
+        </dependency>
+        <!-- OpenAPI gerado a partir das anotacoes dos controllers/DTOs de adapter/in/web (ADR-0019):
+             o contrato canonico e src/fk-servico-carteira-clientes/openapi.yaml, regenerado a
+             partir de /v3/api-docs.yaml enquanto o servico roda (docker compose ou local), nunca
+             escrito a mao. Sem <version>: nao coberto pelo BOM do Spring Boot ainda, fixado
+             explicitamente. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- Testes: Spring Boot 4 fatiou spring-boot-starter-test em starters por slice. -->

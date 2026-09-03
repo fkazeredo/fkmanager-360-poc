@@ -2,6 +2,14 @@ package com.fkmanager360.bffgerente.adapter.in.web;
 
 import com.fkmanager360.bffgerente.config.DelegatedTokenResolver;
 import com.fkmanager360.bffgerente.config.TokenExchangeConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -35,17 +43,75 @@ import org.springframework.web.client.RestClient;
  */
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "solicitacoes", description = "Proxy autenticado da submissao da SolicitacaoAumentoLimite -- corpo "
+        + "e Idempotency-Key repassados intactos para fk-servico-credito.")
 public class SolicitacaoAumentoLimiteProxyController {
 
     private final RestClient creditoRestClient;
     private final DelegatedTokenResolver tokenResolver;
 
+    @Operation(
+            operationId = "submeterSolicitacaoAumentoLimite",
+            summary = "Proxy autenticado da submissao da SolicitacaoAumentoLimite",
+            description = "Encaminhamento puro para fk-servico-credito, com token trocado por Token Exchange "
+                    + "(credito.escrita -- registration distinta da usada no GET do limite vigente, least "
+                    + "privilege por operacao). Corpo e Idempotency-Key atravessam INTACTOS: o BFF nao gera, "
+                    + "nao regenera e nao reinterpreta nenhum dos dois. Status HTTP de sucesso (201/200) e o "
+                    + "corpo sao propagados tal como fk-servico-credito devolveu. Escrita real, sujeita a CSRF "
+                    + "(AC20).")
+    @SecurityRequirement(name = "cookieSessao")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201",
+                    description = "SolicitacaoAumentoLimite criada agora (independentemente do resultado da decisao).",
+                    content = @Content(schema = @Schema(type = "object", description = "Corpo cru propagado de fk-servico-credito, sem tipagem no BFF."))),
+            @ApiResponse(responseCode = "200",
+                    description = "Replay idempotente -- mesma chave, mesmo fingerprint, operacao ja concluida.",
+                    content = @Content(schema = @Schema(type = "object", description = "Corpo cru propagado de fk-servico-credito, sem tipagem no BFF."))),
+            @ApiResponse(responseCode = "400",
+                    description = "IDEMPOTENCY_KEY_AUSENTE (header ausente, recusado pelo proprio BFF), "
+                            + "IDEMPOTENCY_KEY_INVALIDA ou COMANDO_ILEGIVEL (fk-servico-credito), ou "
+                            + "IDENTIFICADOR_INVALIDO (clienteId/contaId fora do formato, recusado pelo proprio BFF).",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "401", description = "Sem sessao autenticada.", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Sem direito de atendimento atual. codigo = SEM_DIREITO_DE_ATENDIMENTO.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "404",
+                    description = "A conta nao e reconhecida pelo CoreLegado. codigo = CONTA_NAO_ENCONTRADA.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "409",
+                    description = "LIMITE_VIGENTE_DESATUALIZADO, SOLICITACAO_NAO_TERMINAL_EXISTENTE ou IDEMPOTENCIA_EM_PROCESSAMENTO.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "422",
+                    description = "COMANDO_INVALIDO, LIMITE_SOLICITADO_NAO_AUMENTA ou IDEMPOTENCIA_FINGERPRINT_DIVERGENTE.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "502",
+                    description = "codigo desconhecido, corpo upstream ilegivel, ou token delegado recusado (401 "
+                            + "da cadeia de Token Exchange -- nunca vira 401 para o browser). codigo = DEPENDENCIA_INDISPONIVEL.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "503",
+                    description = "fk-servico-credito indisponivel. codigo = DEPENDENCIA_INDISPONIVEL.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+    })
     @PostMapping(path = "/api/clientes/{clienteId}/contas/{contaId}/solicitacoes-aumento-limite", produces = "application/json")
     ResponseEntity<String> submeter(
-            @PathVariable String clienteId, @PathVariable String contaId,
+            @Parameter(description = "Identificador do Cliente selecionado.", example = "1",
+                    schema = @Schema(pattern = "^[0-9]{1,10}$"))
+            @PathVariable String clienteId,
+            @Parameter(description = "Identificador da ContaCorrente.", example = "10001",
+                    schema = @Schema(pattern = "^[0-9]{1,10}$"))
+            @PathVariable String contaId,
+            @Parameter(description = "Repassado intacto para fk-servico-credito -- nunca gerado ou "
+                    + "reinterpretado aqui.", required = true, schema = @Schema(format = "uuid"))
             @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Repassado intacto para fk-servico-credito -- o BFF nao desserializa este corpo.",
+                    required = true,
+                    content = @Content(schema = @Schema(type = "object", description = "Corpo cru, nao desserializado no BFF.")))
             @RequestBody String corpoCru,
-            Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(hidden = true) HttpServletRequest request,
+            @Parameter(hidden = true) HttpServletResponse response) {
 
         IdentificadorHost.validar(clienteId, "clienteId");
         IdentificadorHost.validar(contaId, "contaId");

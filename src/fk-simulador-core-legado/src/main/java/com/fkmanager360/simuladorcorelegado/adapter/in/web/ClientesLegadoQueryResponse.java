@@ -1,5 +1,7 @@
 package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -9,8 +11,12 @@ import java.util.List;
  * {@code clientes}.
  */
 public record ClientesLegadoQueryResponse(
+        @Schema(description = "\"000\" quando a requisicao chegou bem formada (falhas estruturais sao 400).",
+                example = "000", requiredMode = Schema.RequiredMode.REQUIRED)
         String codRet,
+        @Schema(example = "LOTE PROCESSADO", requiredMode = Schema.RequiredMode.REQUIRED)
         String msgRet,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         List<ClienteLegadoItemResponse> clientes
 ) {
 

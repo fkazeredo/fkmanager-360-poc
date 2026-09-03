@@ -2,6 +2,14 @@ package com.fkmanager360.bffgerente.adapter.in.web;
 
 import com.fkmanager360.bffgerente.config.DelegatedTokenResolver;
 import com.fkmanager360.bffgerente.config.TokenExchangeConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -36,18 +44,49 @@ import org.springframework.web.client.RestClient;
  */
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "atendimento", description = "Contas do Cliente e a composicao da tela de atendimento a partir dos dois contextos.")
 public class AtendimentoController {
 
     private final RestClient carteiraClientesRestClient;
     private final RestClient creditoRestClient;
     private final DelegatedTokenResolver tokenResolver;
 
+    @Operation(
+            operationId = "listarContasDoCliente",
+            summary = "ContaCorrentes do Cliente selecionado",
+            description = "Encaminhamento autenticado para fk-servico-carteira-clientes, com token trocado "
+                    + "para aquele destino. Se a tela nao precisa de composicao, encaminhar e resposta "
+                    + "legitima do BFF (ADR-0013).")
+    @SecurityRequirement(name = "cookieSessao")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200",
+                    description = "Contas do Cliente. Corpo JSON opaco de fk-servico-carteira-clientes, "
+                            + "repassado sem tipagem no BFF.",
+                    content = @Content(schema = @Schema(type = "object", description = "Corpo cru repassado sem desserializacao no BFF."))),
+            @ApiResponse(responseCode = "400",
+                    description = "clienteId fora do formato esperado. codigo = IDENTIFICADOR_INVALIDO.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "401", description = "Sem sessao autenticada.", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Sem direito de atendimento atual segundo o servico dono do recurso. Status "
+                            + "preservado so quando o corpo upstream carrega um codigo publicado na allow-list "
+                            + "deste BFF; hoje fk-servico-carteira-clientes ainda nao publica codigo.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "502",
+                    description = "Resposta do servico dono do recurso nao reconhecida pela allow-list deste BFF.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "503",
+                    description = "fk-servico-carteira-clientes indisponivel ou inalcancavel no momento.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+    })
     @GetMapping(path = "/api/clientes/{clienteId}/contas", produces = "application/json")
     String listarContasDoCliente(
+            @Parameter(description = "Identificador do Cliente selecionado.", example = "1",
+                    schema = @Schema(pattern = "^[0-9]{1,10}$"))
             @PathVariable String clienteId,
-            Authentication authentication,
-            HttpServletRequest request,
-            HttpServletResponse response) {
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(hidden = true) HttpServletRequest request,
+            @Parameter(hidden = true) HttpServletResponse response) {
 
         IdentificadorHost.validar(clienteId, "clienteId");
 
@@ -60,13 +99,49 @@ public class AtendimentoController {
                 .body(String.class);
     }
 
+    @Operation(
+            operationId = "consultarAtendimento",
+            summary = "Modelo de apresentacao da tela de atendimento -- Cliente, ContaCorrente e limite",
+            description = "Composto pelo BFF a partir de fk-servico-carteira-clientes (identidade e vinculo) e "
+                    + "fk-servico-credito (limite vigente) -- nenhum dos dois contextos precisa conhecer dado "
+                    + "que nao e seu (AC30, ADR-0013). Resultado e modelo de apresentacao, nao agregado. Cada "
+                    + "servico verifica o direito de atendimento por conta propria; o BFF nao e enforcement "
+                    + "point unico e nao suaviza a recusa de quem e dono do recurso (ADR-0007).")
+    @SecurityRequirement(name = "cookieSessao")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200",
+                    description = "Cliente, ContaCorrente e LimiteChequeEspecialVigente numa unica resposta.",
+                    content = @Content(schema = @Schema(implementation = AtendimentoResponse.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "clienteId ou contaId fora do formato esperado. codigo = IDENTIFICADOR_INVALIDO.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "401", description = "Sem sessao autenticada.", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Sem direito de atendimento atual. Status preservado so quando o corpo "
+                            + "upstream carrega um codigo da allow-list deste BFF.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "404",
+                    description = "A conta nao pertence aquele Cliente, ou nao e reconhecida pelo CoreLegado.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "502",
+                    description = "Resposta de um Resource Server nao reconhecida pela allow-list deste BFF.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+            @ApiResponse(responseCode = "503",
+                    description = "Um dos servicos esta indisponivel. Mensagem unica de negocio: o gerente nao "
+                            + "precisa saber qual dependencia caiu.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = GlobalExceptionHandler.EnvelopeErroPublico.class))),
+    })
     @GetMapping(path = "/api/clientes/{clienteId}/contas/{contaId}/atendimento", produces = "application/json")
     AtendimentoResponse atendimento(
+            @Parameter(description = "Identificador do Cliente selecionado.", example = "1",
+                    schema = @Schema(pattern = "^[0-9]{1,10}$"))
             @PathVariable String clienteId,
+            @Parameter(description = "Identificador da ContaCorrente.", example = "10001",
+                    schema = @Schema(pattern = "^[0-9]{1,10}$"))
             @PathVariable String contaId,
-            Authentication authentication,
-            HttpServletRequest request,
-            HttpServletResponse response) {
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(hidden = true) HttpServletRequest request,
+            @Parameter(hidden = true) HttpServletResponse response) {
 
         IdentificadorHost.validar(clienteId, "clienteId");
         IdentificadorHost.validar(contaId, "contaId");

@@ -34,6 +34,12 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        // Documentacao, nao dado de negocio (ADR-0019): o contrato gerado
+                        // (src/fk-servico-carteira-clientes/openapi.yaml) e regenerado a partir
+                        // destes mesmos paths -- exigir token aqui so quebraria a propria
+                        // regeneracao.
+                        .requestMatchers("/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**",
+                                "/swagger-ui.html", "/swagger-ui/**").permitAll()
                         // Scope grosso e papel organizacional sao perguntas distintas (ADR-0015):
                         // scope diz se a identidade pode tentar a capacidade, papel e o que este
                         // endpoint exige. Ambos precisam valer.
