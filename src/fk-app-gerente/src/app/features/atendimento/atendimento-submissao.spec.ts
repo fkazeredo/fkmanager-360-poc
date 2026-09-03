@@ -2,7 +2,7 @@ import { provideHttpClient, withFetch } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AtendimentoComponent, parseReaisParaCentavos } from './atendimento';
-import { ClienteResumo } from '../core/models';
+import { ClienteResumo } from '../../core/models';
 
 /**
  * S-Angular (plano #0003, secao 11): submissao de SolicitacaoAumentoLimite e, sobretudo, o

@@ -1,10 +1,10 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Subject, of } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
-import { AtendimentoService } from '../core/atendimento';
+import { KeyboardService } from '../../core/keyboard';
 import {
   Atendimento,
   CanalManifestacao,
@@ -12,7 +12,9 @@ import {
   ContaResumo,
   SolicitacaoAumentoLimiteComando,
   SolicitacaoAumentoLimiteResultado,
-} from '../core/models';
+} from '../../core/models';
+import { iniciaisDe } from '../../shared/iniciais';
+import { AtendimentoService } from './atendimento-api';
 
 type ResultadoContas = { status: 'sucesso'; itens: ContaResumo[] } | { status: 'erro'; mensagem: string };
 
@@ -40,6 +42,8 @@ type ResultadoAtendimento = { status: 'sucesso'; dados: Atendimento } | { status
 })
 export class AtendimentoComponent {
   private readonly atendimentoService = inject(AtendimentoService);
+  private readonly keyboard = inject(KeyboardService);
+  private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly cliente = input.required<ClienteResumo>();
 
@@ -123,6 +127,9 @@ export class AtendimentoComponent {
         this.carregandoContas.set(false);
         if (resultado.status === 'sucesso') {
           this.contas.set(resultado.itens);
+          // A selecao do Cliente veio de uma acao do gerente; levar o foco para a primeira conta
+          // mantem o fluxo inteiro no teclado (setTimeout: depois do render dos botoes).
+          setTimeout(() => this.focarContas());
         } else {
           this.erro.set(resultado.mensagem);
         }
@@ -144,10 +151,75 @@ export class AtendimentoComponent {
         this.carregandoLimite.set(false);
         if (resultado.status === 'sucesso') {
           this.atendimento.set(resultado.dados);
+          // Conta escolhida e limite na tela: o proximo passo natural e digitar o valor.
+          setTimeout(() => this.focarValor());
         } else {
           this.erro.set(resultado.mensagem);
         }
       });
+
+    const desregistrarContas = this.keyboard.registerFocusTarget('contas', () => this.focarContas());
+    const desregistrarValor = this.keyboard.registerFocusTarget('valor', () => this.focarValor());
+    const destroyRef = inject(DestroyRef);
+    destroyRef.onDestroy(desregistrarContas);
+    destroyRef.onDestroy(desregistrarValor);
+  }
+
+  protected readonly iniciaisDoCliente = computed(() => iniciaisDe(this.cliente().nome));
+
+  /**
+   * Roving tabindex nas contas, como na carteira: a conta selecionada (ou a primeira) e a unica
+   * parada de Tab; setas navegam entre as demais.
+   */
+  protected tabIndexDe(conta: ContaResumo, primeira: boolean): number {
+    const selecionada = this.contaSelecionada();
+    const paradaDeTab = selecionada === null ? primeira : selecionada.contaId === conta.contaId;
+    return paradaDeTab ? 0 : -1;
+  }
+
+  protected onContasKeydown(event: KeyboardEvent): void {
+    const botoes = Array.from(
+      (this.host.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.conta'),
+    );
+    if (botoes.length === 0) {
+      return;
+    }
+    const atual = botoes.indexOf(document.activeElement as HTMLButtonElement);
+    let proximo: number;
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        proximo = Math.min(atual + 1, botoes.length - 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        proximo = Math.max(atual - 1, 0);
+        break;
+      case 'Home':
+        proximo = 0;
+        break;
+      case 'End':
+        proximo = botoes.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    botoes[proximo].focus();
+  }
+
+  private focarContas(): void {
+    const raiz = this.host.nativeElement as HTMLElement;
+    const alvo =
+      raiz.querySelector<HTMLButtonElement>('.conta.selecionada') ??
+      raiz.querySelector<HTMLButtonElement>('.conta');
+    alvo?.focus();
+  }
+
+  private focarValor(): void {
+    (this.host.nativeElement as HTMLElement)
+      .querySelector<HTMLInputElement>('.limite-solicitado')
+      ?.focus();
   }
 
   selecionarConta(conta: ContaResumo): void {

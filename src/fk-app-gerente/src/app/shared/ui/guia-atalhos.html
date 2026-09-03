@@ -1,0 +1,49 @@
+<dialog #caixa class="guia-atalhos" (close)="aoFechar()" aria-labelledby="guia-atalhos-titulo">
+  <header class="guia-cabecalho">
+    <h2 id="guia-atalhos-titulo">Atalhos de teclado</h2>
+    <button
+      type="button"
+      class="botao-icone guia-fechar"
+      (click)="keyboard.fecharGuia()"
+      aria-label="Fechar guia de atalhos">
+      &times;
+    </button>
+  </header>
+
+  <p class="guia-descricao">Trabalhe sem tirar as maos do teclado.</p>
+
+  <dl class="guia-lista">
+    <div class="guia-item">
+      <dt><kbd>&uarr;</kbd> <kbd>&darr;</kbd></dt>
+      <dd>Navegar pelos clientes da carteira ou pelas contas</dd>
+    </div>
+    <div class="guia-item">
+      <dt><kbd>&larr;</kbd> <kbd>&rarr;</kbd></dt>
+      <dd>Pagina anterior e proxima da carteira; conta anterior e proxima</dd>
+    </div>
+    <div class="guia-item">
+      <dt><kbd>Enter</kbd></dt>
+      <dd>Selecionar o cliente ou a conta em foco; enviar o formulario</dd>
+    </div>
+    <div class="guia-item">
+      <dt><kbd>c</kbd></dt>
+      <dd>Ir para a carteira de clientes</dd>
+    </div>
+    <div class="guia-item">
+      <dt><kbd>a</kbd></dt>
+      <dd>Ir para as contas do cliente em atendimento</dd>
+    </div>
+    <div class="guia-item">
+      <dt><kbd>l</kbd></dt>
+      <dd>Ir para o campo de limite solicitado</dd>
+    </div>
+    <div class="guia-item">
+      <dt><kbd>?</kbd></dt>
+      <dd>Abrir ou fechar este guia</dd>
+    </div>
+    <div class="guia-item">
+      <dt><kbd>Esc</kbd></dt>
+      <dd>Fechar este guia</dd>
+    </div>
+  </dl>
+</dialog>

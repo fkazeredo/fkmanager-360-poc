@@ -1,0 +1,126 @@
+.carteira {
+  padding: 1.25rem;
+}
+
+.carteira-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.carteira-cabecalho h2 {
+  font-size: 1.0625rem;
+}
+
+.contagem {
+  min-width: 1.75rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--raio-pilula);
+  background: var(--marca-50);
+  color: var(--marca-700);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.carregando-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.carregando-lista .esqueleto {
+  height: 3.25rem;
+}
+
+.lista-vazia {
+  padding: 1.5rem 0;
+  color: var(--tinta-500);
+  text-align: center;
+}
+
+.lista-clientes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* O item inteiro e o alvo de clique: selecionar o Cliente e uma acao, nao um link de navegacao. */
+.selecionar-cliente {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--raio);
+  text-align: left;
+  transition: background var(--transicao);
+}
+
+.selecionar-cliente:hover {
+  background: var(--superficie-2);
+}
+
+.selecionar-cliente .dados {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.selecionar-cliente .nome {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selecionar-cliente .cpf {
+  font-size: 0.8125rem;
+  color: var(--tinta-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.selecionar-cliente .indicador {
+  color: var(--tinta-400);
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: transform var(--transicao);
+}
+
+.selecionar-cliente:hover .indicador {
+  transform: translateX(2px);
+  color: var(--marca-600);
+}
+
+.lista-clientes li.selecionado .selecionar-cliente {
+  background: var(--marca-50);
+  box-shadow: inset 3px 0 0 var(--marca-600);
+}
+
+.lista-clientes li.selecionado .nome {
+  color: var(--marca-800);
+}
+
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--borda);
+}
+
+.paginacao .botao-secundario {
+  padding: 0.375rem 0.875rem;
+  font-size: 0.875rem;
+}
+
+.paginacao-status {
+  font-size: 0.8125rem;
+  color: var(--tinta-500);
+  text-align: center;
+}
