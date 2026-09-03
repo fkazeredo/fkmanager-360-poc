@@ -6,7 +6,7 @@ import {
   ContasDoCliente,
   SolicitacaoAumentoLimiteComando,
   SolicitacaoAumentoLimiteResultado,
-} from './models';
+} from '../../core/models';
 
 /**
  * O Angular fala apenas com o bff-gerente, nunca com um Resource Server ou com o CoreLegado

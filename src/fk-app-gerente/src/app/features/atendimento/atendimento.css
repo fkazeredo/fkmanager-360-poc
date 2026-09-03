@@ -1,0 +1,280 @@
+.atendimento {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* --- Cliente em atendimento ------------------------------------------------------------------- */
+
+.atendimento-cliente {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.atendimento-cliente-dados {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rotulo-secao {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--marca-600);
+}
+
+.cliente-nome {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cliente-cpf {
+  font-size: 0.875rem;
+  color: var(--tinta-500);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Contas ----------------------------------------------------------------------------------- */
+
+.contas {
+  padding: 1.25rem;
+}
+
+.contas h3,
+.solicitacao-aumento-limite h3 {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.carregando-contas {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.carregando-contas .esqueleto {
+  height: 2.5rem;
+  width: 10rem;
+}
+
+.sem-contas {
+  color: var(--tinta-500);
+}
+
+.lista-contas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.conta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-pilula);
+  background: var(--superficie);
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color var(--transicao),
+    background var(--transicao);
+}
+
+.conta:hover {
+  border-color: var(--marca-400);
+  background: var(--marca-50);
+}
+
+.conta .conta-agencia {
+  font-size: 0.8125rem;
+  color: var(--tinta-500);
+}
+
+.conta .conta-numero {
+  font-weight: 600;
+}
+
+.conta.selecionada {
+  border-color: var(--marca-600);
+  background: var(--marca-50);
+  box-shadow: 0 0 0 1px var(--marca-600);
+}
+
+.conta.selecionada .conta-numero {
+  color: var(--marca-800);
+}
+
+.contas .aviso-erro {
+  margin-top: 0.75rem;
+}
+
+/* --- Limite vigente --------------------------------------------------------------------------- */
+
+.consultando-limite {
+  padding: 1.25rem;
+  color: var(--tinta-500);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.consultando-limite .esqueleto {
+  height: 2.25rem;
+  width: 12rem;
+}
+
+.limite-vigente {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.25rem;
+  background: linear-gradient(135deg, var(--marca-950), var(--marca-800));
+  border: none;
+  color: #fff;
+}
+
+.limite-vigente .rotulo {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--marca-200);
+}
+
+.limite-vigente .valor {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.limite-vigente .procedencia {
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* --- Formulario de solicitacao ---------------------------------------------------------------- */
+
+.solicitacao-aumento-limite {
+  padding: 1.25rem;
+}
+
+.formulario-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.875rem;
+}
+
+.campo-largo {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 40rem) {
+  .formulario-campos {
+    grid-template-columns: 1fr;
+  }
+}
+
+.formulario-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-top: 1rem;
+}
+
+.dica-envio {
+  font-size: 0.8125rem;
+  color: var(--tinta-400);
+}
+
+/* --- Decisao ---------------------------------------------------------------------------------- */
+
+.decisao {
+  padding: 1.25rem;
+}
+
+.decisao-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.decisao-selo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.decisao.aprovada {
+  border-color: color-mix(in srgb, var(--sucesso-600) 40%, transparent);
+  box-shadow: inset 4px 0 0 var(--sucesso-600), var(--sombra-1);
+}
+
+.decisao.aprovada .decisao-selo {
+  background: var(--sucesso-100);
+  color: var(--sucesso-700);
+}
+
+.decisao.rejeitada {
+  border-color: color-mix(in srgb, var(--erro-600) 40%, transparent);
+  box-shadow: inset 4px 0 0 var(--erro-600), var(--sombra-1);
+}
+
+.decisao.rejeitada .decisao-selo {
+  background: var(--erro-100);
+  color: var(--erro-700);
+}
+
+.mensagem-decisao {
+  font-weight: 600;
+}
+
+.decisao-detalhes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.decisao-detalhe {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.decisao-detalhe dt {
+  font-size: 0.875rem;
+  color: var(--tinta-500);
+}
+
+.decisao-detalhe dd {
+  font-weight: 700;
+}
+
+.limite-pendente .rotulo-pendente {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--atencao-700);
+  background: var(--atencao-100);
+  border-radius: var(--raio-pilula);
+  padding: 0.125rem 0.5rem;
+  margin-left: 0.375rem;
+}
+
+.status-solicitacao {
+  margin-top: 0.875rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--borda);
+  font-size: 0.8125rem;
+  color: var(--tinta-500);
+  font-variant-numeric: tabular-nums;
+}

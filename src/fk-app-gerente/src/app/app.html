@@ -1,26 +1,66 @@
 <header class="cabecalho">
-  <h1>fk-manager 360</h1>
+  <div class="marca">
+    <span class="marca-logo" aria-hidden="true">fk</span>
+    <span class="marca-nome">manager <strong>360</strong></span>
+  </div>
+
   @if (session.gerenteId(); as gerenteId) {
-    <div class="usuario">
-      <span>{{ gerenteId }}</span>
-      <button type="button" (click)="session.logout()">Sair</button>
+    <div class="acoes-cabecalho">
+      <button
+        type="button"
+        class="botao-icone ajuda"
+        (click)="keyboard.abrirGuia()"
+        aria-label="Guia de atalhos de teclado"
+        title="Atalhos de teclado (?)">
+        ?
+      </button>
+      <div class="usuario">
+        <span class="avatar avatar-claro" aria-hidden="true">{{ iniciais() }}</span>
+        <span class="usuario-nome">{{ gerenteId }}</span>
+        <button type="button" class="botao-fantasma" (click)="session.logout()">Sair</button>
+      </div>
     </div>
   }
 </header>
 
 <main>
   @if (session.loading()) {
-    <p>Carregando...</p>
+    <p class="carregando-sessao">Carregando...</p>
   } @else if (session.gerenteId()) {
-    <app-carteira-lista (clienteSelecionado)="atender($event)" />
+    <div class="painel">
+      <app-carteira-lista (clienteSelecionado)="atender($event)" />
 
-    @if (clienteEmAtendimento(); as cliente) {
-      <app-atendimento [cliente]="cliente" />
-    }
+      @if (clienteEmAtendimento(); as cliente) {
+        <app-atendimento [cliente]="cliente" />
+      } @else {
+        <section class="atendimento-vazio cartao" aria-label="Nenhum cliente em atendimento">
+          <svg class="ilustracao" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+            <path
+              d="M4.5 20a7.5 7.5 0 0 1 15 0"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round" />
+          </svg>
+          <h2>Nenhum cliente em atendimento</h2>
+          <p>Selecione um cliente na carteira para ver contas, limite vigente e registrar solicitacoes.</p>
+          <p class="dica">
+            Use <kbd>&uarr;</kbd> <kbd>&darr;</kbd> e <kbd>Enter</kbd> na carteira.
+            Pressione <kbd>?</kbd> para ver todos os atalhos.
+          </p>
+        </section>
+      }
+    </div>
   } @else {
     <section class="login">
-      <p>Voce precisa entrar para acessar sua carteira de clientes.</p>
-      <button type="button" (click)="session.login()">Entrar</button>
+      <div class="login-cartao cartao">
+        <span class="marca-logo login-logo" aria-hidden="true">fk</span>
+        <h2>fk-manager 360</h2>
+        <p>Voce precisa entrar para acessar sua carteira de clientes.</p>
+        <button type="button" class="botao-primario" (click)="session.login()">Entrar</button>
+      </div>
     </section>
   }
 </main>
+
+<app-guia-atalhos />

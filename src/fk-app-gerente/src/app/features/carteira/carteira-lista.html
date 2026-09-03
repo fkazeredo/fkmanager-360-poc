@@ -1,0 +1,62 @@
+<section class="carteira cartao" aria-label="Carteira de clientes">
+  <header class="carteira-cabecalho">
+    <h2>Minha carteira de clientes</h2>
+    @if (!loading() && !error() && items().length > 0) {
+      <span class="contagem" aria-hidden="true">{{ totalElements() }}</span>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="carregando-lista">
+      <div class="esqueleto"></div>
+      <div class="esqueleto"></div>
+      <div class="esqueleto"></div>
+      <p class="apenas-leitor">Carregando...</p>
+    </div>
+  } @else if (error()) {
+    <div class="aviso-erro erro">
+      <p>Nao foi possivel carregar sua carteira agora. Tente novamente.</p>
+      <button type="button" class="botao-secundario" (click)="fetch(page())">Tentar novamente</button>
+    </div>
+  } @else if (items().length === 0) {
+    <p class="lista-vazia">Nenhum cliente na sua carteira.</p>
+  } @else {
+    <ul class="lista-clientes" (keydown)="onListaKeydown($event)">
+      @for (cliente of items(); track cliente.clienteId; let primeiro = $first) {
+        <li [class.selecionado]="selecionado()?.clienteId === cliente.clienteId">
+          <button
+            type="button"
+            class="selecionar-cliente"
+            [tabindex]="tabIndexDe(cliente, primeiro)"
+            (click)="selecionar(cliente)">
+            <span class="avatar" aria-hidden="true">{{ iniciais(cliente.nome) }}</span>
+            <span class="dados">
+              <span class="nome">{{ cliente.nome }}</span>
+              <span class="cpf">{{ cliente.cpfMascarado }}</span>
+            </span>
+            <span class="indicador" aria-hidden="true">&rsaquo;</span>
+          </button>
+        </li>
+      }
+    </ul>
+
+    <footer class="paginacao">
+      <button
+        type="button"
+        class="botao-secundario"
+        (click)="previousPage()"
+        [disabled]="page() === 0">
+        Anterior
+      </button>
+      <!-- Numa linha so: o e2e ancora o texto com /^Pagina/, e whitespace inicial quebraria a ancora. -->
+      <span class="paginacao-status">Pagina {{ page() + 1 }} de {{ totalPages() }} &middot; {{ totalElements() }} clientes</span>
+      <button
+        type="button"
+        class="botao-secundario"
+        (click)="nextPage()"
+        [disabled]="page() + 1 >= totalPages()">
+        Proxima
+      </button>
+    </footer>
+  }
+</section>

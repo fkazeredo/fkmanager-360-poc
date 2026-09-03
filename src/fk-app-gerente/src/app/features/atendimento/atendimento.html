@@ -1,0 +1,139 @@
+<section class="atendimento" aria-label="Atendimento">
+  <header class="atendimento-cliente cartao">
+    <span class="avatar avatar-grande" aria-hidden="true">{{ iniciaisDoCliente() }}</span>
+    <div class="atendimento-cliente-dados">
+      <span class="rotulo-secao">Em atendimento</span>
+      <span class="cliente-nome">{{ cliente().nome }}</span>
+      <span class="cliente-cpf">CPF {{ cliente().cpfMascarado }}</span>
+    </div>
+  </header>
+
+  <section class="contas cartao">
+    <h3>Contas do cliente</h3>
+
+    @if (carregandoContas()) {
+      <div class="carregando-contas">
+        <div class="esqueleto"></div>
+        <div class="esqueleto"></div>
+        <p class="apenas-leitor">Carregando contas...</p>
+      </div>
+    } @else if (contas().length === 0 && !erro()) {
+      <p class="sem-contas">Este cliente nao possui conta corrente.</p>
+    } @else {
+      <ul class="lista-contas" (keydown)="onContasKeydown($event)">
+        @for (conta of contas(); track conta.contaId; let primeira = $first) {
+          <li>
+            <button
+              type="button"
+              class="conta"
+              [class.selecionada]="contaSelecionada()?.contaId === conta.contaId"
+              [tabindex]="tabIndexDe(conta, primeira)"
+              (click)="selecionarConta(conta)">
+              <span class="conta-agencia">Ag. {{ conta.agencia }}</span>
+              <span class="conta-numero">&middot; Conta {{ conta.contaId }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (erro()) {
+      <p class="aviso-erro erro">{{ erro() }}</p>
+    }
+  </section>
+
+  @if (carregandoLimite()) {
+    <div class="cartao consultando-limite">
+      <div class="esqueleto"></div>
+      <p>Consultando o limite no CoreLegado...</p>
+    </div>
+  } @else if (atendimento(); as dados) {
+    <div class="limite-vigente cartao">
+      <span class="rotulo">Limite de cheque especial vigente</span>
+      <strong class="valor valor-monetario">{{ limiteFormatado() }}</strong>
+      <span class="procedencia">
+        Confirmado pelo CoreLegado em {{ dados.consultadoEm | date: 'dd/MM/yyyy HH:mm' }}
+        para a conta {{ dados.conta.contaId }} de {{ dados.cliente.nome }}
+      </span>
+    </div>
+
+    <form class="solicitacao-aumento-limite cartao" (submit)="onFormSubmit($event)">
+      <h3>Solicitar aumento de limite</h3>
+
+      <div class="formulario-campos">
+        <label class="campo">
+          <span class="campo-rotulo">Canal da manifestacao</span>
+          <select
+            class="canal-manifestacao"
+            [value]="canalManifestacao()"
+            (change)="onCanalManifestacaoChange($any($event.target).value)">
+            <option value="PRESENCIAL">Presencial</option>
+            <option value="TELEFONE">Telefone</option>
+            <option value="CANAL_DIGITAL">Canal digital</option>
+          </select>
+        </label>
+
+        <label class="campo">
+          <span class="campo-rotulo">Limite solicitado (R$)</span>
+          <input
+            type="text"
+            class="limite-solicitado valor-monetario"
+            inputmode="decimal"
+            placeholder="0,00"
+            [value]="limiteSolicitadoReais()"
+            (input)="onLimiteSolicitadoChange($any($event.target).value)" />
+        </label>
+
+        <label class="campo campo-largo">
+          <span class="campo-rotulo">Observacao <span class="opcional">(opcional)</span></span>
+          <textarea
+            class="observacao"
+            maxlength="500"
+            [value]="observacao()"
+            (input)="onObservacaoChange($any($event.target).value)"></textarea>
+        </label>
+      </div>
+
+      <div class="formulario-acoes">
+        <button type="submit" class="botao-primario" [disabled]="enviando() || formularioBloqueado()">
+          {{ enviando() ? 'Enviando...' : 'Solicitar aumento' }}
+        </button>
+        <span class="dica-envio"><kbd>Enter</kbd> no campo de valor tambem envia</span>
+      </div>
+    </form>
+
+    @if (erroSubmissao()) {
+      <p class="aviso-erro erro-submissao">{{ erroSubmissao() }}</p>
+    }
+
+    @if (resultadoSubmissao(); as resultado) {
+      <div
+        class="decisao cartao"
+        [class.aprovada]="resultado.decisao.resultado === 'APROVADA'"
+        [class.rejeitada]="resultado.decisao.resultado === 'REJEITADA'">
+        <div class="decisao-cabecalho">
+          <span class="decisao-selo" aria-hidden="true">
+            {{ resultado.decisao.resultado === 'APROVADA' ? '✓' : '✕' }}
+          </span>
+          <p class="mensagem-decisao">{{ mensagemDecisaoExibida() }}</p>
+        </div>
+        <dl class="decisao-detalhes">
+          <div class="decisao-detalhe">
+            <dt>Limite vigente (confirmado pelo Core)</dt>
+            <dd class="limite-vigente-confirmado valor-monetario">{{ limiteVigenteConfirmadoFormatado() }}</dd>
+          </div>
+          @if (resultado.limiteSolicitadoPendenteDeEfetivacao !== undefined) {
+            <div class="decisao-detalhe">
+              <dt>Limite solicitado</dt>
+              <dd class="limite-pendente valor-monetario">
+                {{ limitePendenteFormatado() }}
+                <span class="rotulo-pendente">aguardando confirmacao do Core</span>
+              </dd>
+            </div>
+          }
+        </dl>
+        <p class="status-solicitacao">Status: {{ resultado.status }}</p>
+      </div>
+    }
+  }
+</section>
