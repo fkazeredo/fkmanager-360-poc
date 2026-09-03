@@ -12,6 +12,15 @@ ng serve
 
 Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
 
+> **Nota sobre a porta 4200**: este e o mesmo numero de porta que `compose.yaml` publica para o
+> `app-gerente` (nginx, com TLS, em `https://localhost:4200`) desde a decisao do Owner registrada em
+> `docs/adr/0013-deployable-e-delimitado-por-perfil-de-execucao.md`. A coincidencia e inofensiva
+> porque os dois nunca rodam ao mesmo tempo: ou se sobe a stack integrada via Compose (nginx serve a
+> SPA buildada e faz proxy de `/bff/`, `/oauth2/` e `/login`), ou se roda `ng serve` localmente
+> contra um `bff-gerente` publicado a parte (usando `proxy.conf.json`, hoje praticamente inerte
+> porque o Compose nao publica a porta do `bff-gerente`). Rodar os dois processos ao mesmo tempo
+> nesta mesma maquina colidiria na porta 4200 -- nao e um cenario suportado.
+
 ## Code scaffolding
 
 Angular CLI includes powerful code scaffolding tools. To generate a new component, run:

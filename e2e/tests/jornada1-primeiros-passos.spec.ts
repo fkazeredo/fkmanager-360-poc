@@ -170,7 +170,7 @@ test.describe('Jornada 1 -- primeiros passos', () => {
 
     // Um unico endereco publico: nem servico-credito, nem servico-carteira-clientes, nem o
     // simulador tem porta publicada -- a composicao acontece no servidor (AC30).
-    expect([...origensChamadas]).toEqual(['https://localhost']);
+    expect([...origensChamadas]).toEqual(['https://localhost:4200']);
   });
 
   test('AC23: sem direito de atendimento, o backend recusa mesmo sem passar pela navegacao do Angular', async ({

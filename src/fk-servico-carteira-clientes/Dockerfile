@@ -2,7 +2,11 @@
 FROM eclipse-temurin:25-jdk-alpine AS build
 WORKDIR /workspace
 
-COPY pom.xml mvnw ./
+# lombok.config faz parte do contrato de compilacao, nao e conveniencia de IDE: e ele que
+# carrega copyableAnnotations (@Qualifier do campo -> parametro do construtor gerado) e
+# addLombokGeneratedAnnotation. Sem copia-lo para o contexto de build, o container compila sem
+# erro e falha no wiring em runtime -- exatamente o que aconteceu na primeira subida.
+COPY pom.xml lombok.config mvnw ./
 COPY .mvn/ .mvn/
 COPY src/fk-servico-carteira-clientes/pom.xml src/fk-servico-carteira-clientes/pom.xml
 RUN chmod +x mvnw
