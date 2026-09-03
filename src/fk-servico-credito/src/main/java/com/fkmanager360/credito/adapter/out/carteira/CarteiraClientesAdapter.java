@@ -7,6 +7,8 @@ import com.fkmanager360.credito.application.port.out.DireitoDeAtendimentoPort;
 import com.fkmanager360.credito.config.TokenExchangeConfig;
 import com.fkmanager360.credito.domain.ClienteId;
 import com.fkmanager360.credito.domain.ContaId;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest;
@@ -35,16 +37,18 @@ import org.springframework.web.client.RestClientException;
  * emitida" (AC23) deixa de depender de disciplina e passa a ser consequencia estrutural.
  */
 @Component
+@RequiredArgsConstructor
 public class CarteiraClientesAdapter implements DireitoDeAtendimentoPort {
 
+    // Qualifier explicito (nao havia antes): o construtor manual dependia do NOME do parametro
+    // (carteiraClientesRestClient) coincidir com o nome do @Bean para o Spring resolver por
+    // convencao, ja que ha mais de um RestClient neste modulo (ver CoreLegadoAclConfig). O
+    // parametro gerado por @RequiredArgsConstructor usa o nome do CAMPO (restClient), o que
+    // quebraria essa resolucao implicita -- por isso o @Qualifier passa a ser explicito aqui.
+    @Qualifier("carteiraClientesRestClient")
     private final RestClient restClient;
-    private final OAuth2AuthorizedClientManager authorizedClientManager;
 
-    public CarteiraClientesAdapter(
-            RestClient carteiraClientesRestClient, OAuth2AuthorizedClientManager authorizedClientManager) {
-        this.restClient = carteiraClientesRestClient;
-        this.authorizedClientManager = authorizedClientManager;
-    }
+    private final OAuth2AuthorizedClientManager authorizedClientManager;
 
     @Override
     public void confirmarDireitoDeAtendimento(ClienteId clienteId, ContaId contaId) {

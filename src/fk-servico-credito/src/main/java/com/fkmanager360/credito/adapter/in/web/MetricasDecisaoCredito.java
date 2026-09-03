@@ -2,6 +2,7 @@ package com.fkmanager360.credito.adapter.in.web;
 
 import com.fkmanager360.credito.application.ResultadoSubmissao;
 import io.micrometer.core.instrument.MeterRegistry;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,13 +22,10 @@ import org.springframework.stereotype.Component;
  * {@code correlationId} (AC36 parcial).
  */
 @Component
+@RequiredArgsConstructor
 class MetricasDecisaoCredito {
 
     private final MeterRegistry meterRegistry;
-
-    MetricasDecisaoCredito(MeterRegistry meterRegistry) {
-        this.meterRegistry = meterRegistry;
-    }
 
     void registrarDecisao(ResultadoSubmissao resultado) {
         if (!resultado.decidiuAgora()) {

@@ -4,6 +4,7 @@ import com.fkmanager360.bffgerente.config.DelegatedTokenResolver;
 import com.fkmanager360.bffgerente.config.TokenExchangeConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,6 +36,7 @@ import java.util.regex.Pattern;
  * par de chamadas nesta rota. Adiado deliberadamente; nao e um descuido.
  */
 @RestController
+@RequiredArgsConstructor
 public class AtendimentoController {
 
     private static final Pattern IDENTIFICADOR_HOST = Pattern.compile("[0-9]{1,10}");
@@ -42,15 +44,6 @@ public class AtendimentoController {
     private final RestClient carteiraClientesRestClient;
     private final RestClient creditoRestClient;
     private final DelegatedTokenResolver tokenResolver;
-
-    public AtendimentoController(
-            RestClient carteiraClientesRestClient,
-            RestClient creditoRestClient,
-            DelegatedTokenResolver tokenResolver) {
-        this.carteiraClientesRestClient = carteiraClientesRestClient;
-        this.creditoRestClient = creditoRestClient;
-        this.tokenResolver = tokenResolver;
-    }
 
     @GetMapping(path = "/api/clientes/{clienteId}/contas", produces = "application/json")
     String listarContasDoCliente(

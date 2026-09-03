@@ -7,6 +7,7 @@ import com.fkmanager360.credito.domain.AtorId;
 import com.fkmanager360.credito.domain.ClienteId;
 import com.fkmanager360.credito.domain.ContaId;
 import com.fkmanager360.credito.domain.IdempotencyKey;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -38,20 +39,12 @@ import java.util.UUID;
  * gerente (SubmissaoSegurancaTest cobre isto explicitamente).
  */
 @RestController
+@RequiredArgsConstructor
 public class SolicitacaoAumentoLimiteController {
 
     private final RegistrarSolicitacaoAumentoLimite registrarSolicitacaoAumentoLimite;
     private final MetricasDecisaoCredito metricasDecisaoCredito;
     private final Clock clock;
-
-    public SolicitacaoAumentoLimiteController(
-            RegistrarSolicitacaoAumentoLimite registrarSolicitacaoAumentoLimite,
-            MetricasDecisaoCredito metricasDecisaoCredito,
-            Clock clock) {
-        this.registrarSolicitacaoAumentoLimite = registrarSolicitacaoAumentoLimite;
-        this.metricasDecisaoCredito = metricasDecisaoCredito;
-        this.clock = clock;
-    }
 
     @PostMapping("/clientes/{clienteId}/contas/{contaId}/solicitacoes-aumento-limite")
     ResponseEntity<SolicitacaoAumentoLimiteResponse> submeter(

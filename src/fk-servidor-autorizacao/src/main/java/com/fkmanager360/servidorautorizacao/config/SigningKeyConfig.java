@@ -5,8 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,9 +29,8 @@ import java.util.UUID;
  * tokens a cada restart e aceitavel.
  */
 @Configuration
+@Slf4j
 public class SigningKeyConfig {
-
-    private static final Logger LOG = LoggerFactory.getLogger(SigningKeyConfig.class);
 
     @Bean
     JWKSource<SecurityContext> jwkSource(
@@ -76,7 +74,7 @@ public class SigningKeyConfig {
     }
 
     private RSAKey generateEphemeralKey() {
-        LOG.warn("Nenhuma chave de assinatura configurada -- gerando par RSA efemero. "
+        log.warn("Nenhuma chave de assinatura configurada -- gerando par RSA efemero. "
                 + "Valido apenas para desenvolvimento local e teste: tokens ficam invalidos a cada restart.");
         try {
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");

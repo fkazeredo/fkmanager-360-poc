@@ -1,6 +1,7 @@
 package com.fkmanager360.bffgerente.adapter.in.web;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -70,6 +71,7 @@ import java.util.Set;
  * simples, totalmente controlado por esta classe, evita esse comportamento de framework.
  */
 @RestControllerAdvice(basePackages = "com.fkmanager360.bffgerente.adapter.in.web")
+@RequiredArgsConstructor
 class GlobalExceptionHandler {
 
     /**
@@ -97,10 +99,6 @@ class GlobalExceptionHandler {
                     "COMANDO_INVALIDO", "LIMITE_SOLICITADO_NAO_AUMENTA", "IDEMPOTENCIA_FINGERPRINT_DIVERGENTE"));
 
     private final ObjectMapper objectMapper;
-
-    GlobalExceptionHandler(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<EnvelopeErroPublico> entradaInvalida(IllegalArgumentException e) {

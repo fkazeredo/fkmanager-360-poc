@@ -2,6 +2,7 @@ package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
 import com.fkmanager360.simuladorcorelegado.domain.ContasLegadoStore;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,13 +18,10 @@ import java.util.List;
  * <p>Sem autenticacao, pela mesma decisao consciente registrada em {@link ClienteLegadoController}.
  */
 @RestController
+@RequiredArgsConstructor
 public class ContaLegadoController {
 
     private final ContasLegadoStore store;
-
-    public ContaLegadoController(ContasLegadoStore store) {
-        this.store = store;
-    }
 
     @PostMapping(path = "/legado/contas/consulta")
     public ContasLegadoQueryResponse consultarContasDoCliente(@Valid @RequestBody ContasLegadoQueryRequest requisicao) {

@@ -4,6 +4,7 @@ import com.fkmanager360.bffgerente.config.DelegatedTokenResolver;
 import com.fkmanager360.bffgerente.config.TokenExchangeConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,15 +20,11 @@ import org.springframework.web.client.RestClient;
  * feita pelo servico dono do recurso (ADR-0007): o 403 de CarteiraClientes so atravessa.
  */
 @RestController
+@RequiredArgsConstructor
 public class CarteiraProxyController {
 
     private final RestClient carteiraClientesRestClient;
     private final DelegatedTokenResolver tokenResolver;
-
-    public CarteiraProxyController(RestClient carteiraClientesRestClient, DelegatedTokenResolver tokenResolver) {
-        this.carteiraClientesRestClient = carteiraClientesRestClient;
-        this.tokenResolver = tokenResolver;
-    }
 
     @GetMapping(path = "/api/carteira/clientes", produces = "application/json")
     String listarClientesDaCarteira(

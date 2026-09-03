@@ -4,6 +4,7 @@ import com.fkmanager360.bffgerente.config.DelegatedTokenResolver;
 import com.fkmanager360.bffgerente.config.TokenExchangeConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -34,17 +35,13 @@ import java.util.regex.Pattern;
  * {@code ProblemDetail} de Credito verbatim.
  */
 @RestController
+@RequiredArgsConstructor
 public class SolicitacaoAumentoLimiteProxyController {
 
     private static final Pattern IDENTIFICADOR_HOST = Pattern.compile("[0-9]{1,10}");
 
     private final RestClient creditoRestClient;
     private final DelegatedTokenResolver tokenResolver;
-
-    public SolicitacaoAumentoLimiteProxyController(RestClient creditoRestClient, DelegatedTokenResolver tokenResolver) {
-        this.creditoRestClient = creditoRestClient;
-        this.tokenResolver = tokenResolver;
-    }
 
     @PostMapping(path = "/api/clientes/{clienteId}/contas/{contaId}/solicitacoes-aumento-limite", produces = "application/json")
     ResponseEntity<String> submeter(

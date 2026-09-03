@@ -5,6 +5,7 @@ import com.fkmanager360.carteiraclientes.application.port.out.InvalidCoreLegadoR
 import com.fkmanager360.carteiraclientes.domain.ClienteId;
 import com.fkmanager360.carteiraclientes.domain.ContaCorrente;
 import com.fkmanager360.carteiraclientes.domain.ContaId;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -20,16 +21,14 @@ import java.util.List;
  * pertencem a Credito e sao lidos pela ACL daquele contexto.
  */
 @Component
+@RequiredArgsConstructor
 public class ContaLegadoAclAdapter implements ContasClientePort {
 
     private static final String COD_RET_SUCESSO = "000";
     private static final String COD_RET_CONTA_NAO_ENCONTRADA = "121";
 
+    @Qualifier("coreLegadoRestClient")
     private final RestClient restClient;
-
-    public ContaLegadoAclAdapter(@Qualifier("coreLegadoRestClient") RestClient restClient) {
-        this.restClient = restClient;
-    }
 
     @Override
     public List<ContaCorrente> buscarContasDoCliente(ClienteId clienteId) {

@@ -2,6 +2,7 @@ package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
 import com.fkmanager360.simuladorcorelegado.domain.ClientesLegadoStore;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,13 +21,10 @@ import java.util.List;
  * pela rede interna do Compose (nenhuma porta publicada para este servico).
  */
 @RestController
+@RequiredArgsConstructor
 public class ClienteLegadoController {
 
     private final ClientesLegadoStore store;
-
-    public ClienteLegadoController(ClientesLegadoStore store) {
-        this.store = store;
-    }
 
     @PostMapping(path = "/legado/clientes/consulta-lote")
     public ClientesLegadoQueryResponse consultarLote(@Valid @RequestBody ClientesLegadoQueryRequest requisicao) {

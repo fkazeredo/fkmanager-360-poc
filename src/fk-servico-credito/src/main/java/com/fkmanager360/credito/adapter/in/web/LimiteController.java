@@ -3,6 +3,7 @@ package com.fkmanager360.credito.adapter.in.web;
 import com.fkmanager360.credito.application.usecase.ConsultarLimiteChequeEspecialVigente;
 import com.fkmanager360.credito.domain.ClienteId;
 import com.fkmanager360.credito.domain.ContaId;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,13 +19,10 @@ import org.springframework.web.bind.annotation.RestController;
  * CarteiraClientes contra o Core.
  */
 @RestController
+@RequiredArgsConstructor
 public class LimiteController {
 
     private final ConsultarLimiteChequeEspecialVigente consultarLimite;
-
-    public LimiteController(ConsultarLimiteChequeEspecialVigente consultarLimite) {
-        this.consultarLimite = consultarLimite;
-    }
 
     @GetMapping("/clientes/{clienteId}/contas/{contaId}/limite-cheque-especial-vigente")
     LimiteChequeEspecialVigenteResponse consultar(
