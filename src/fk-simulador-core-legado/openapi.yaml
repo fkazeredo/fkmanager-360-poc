@@ -20,7 +20,7 @@ tags:
 - name: conta-legado
   description: Consulta de contas de um Cliente e dos dados de credito de uma conta.
 - name: cliente-legado
-  description: "Consulta em lote de dados mestres, formato host-centric fictÃ­cio."
+  description: "Consulta em lote de dados mestres, formato host-centric fictício."
 paths:
   /legado/efetivacoes:
     post:
@@ -33,8 +33,9 @@ paths:
         \ mesmo payload) nunca aplica a alteracao duas vezes e devolve o MESMO numPrt;\
         \ o mesmo idEft com payload diferente e sempre rejeitado explicitamente (codRet\
         \ 207), nunca tratado como operacao nova. Esta operacao NAO aplica a alteracao\
-        \ no limite consultado por /legado/contas/consulta-credito -- confirmacao\
-        \ e callback pertencem a #0005; consulta de status por protocolo/idEft a #0006."
+        \ sincronamente -- o novo limite so passa a valer para /legado/contas/consulta-credito,\
+        \ e o callback so e disparado, apos o processamento assincrono (#0005). Consulta\
+        \ de status por protocolo/idEft pertence a #0006."
       operationId: efetivarLimiteLegado
       requestBody:
         content:

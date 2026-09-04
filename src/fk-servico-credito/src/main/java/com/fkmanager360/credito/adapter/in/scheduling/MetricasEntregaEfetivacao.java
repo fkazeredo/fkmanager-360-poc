@@ -51,6 +51,17 @@ class MetricasEntregaEfetivacao {
                         .record(falhaDefinitiva.permanenciaEmAguardandoEfetivacao());
             }
             case ResultadoEpisodioEntrega.Indeterminada ignored -> classe("INDETERMINADO");
+            // #0005: nao e uma classe de entrega nova -- o resultado que ESTE episodio trazia
+            // perdeu, entao nao ha desfecho de entrega deste worker para contar em
+            // efetivacao_entregas_total (esse contador ja foi incrementado por quem realmente
+            // concluiu). So a anomalia de concorrencia e observavel aqui.
+            case ResultadoEpisodioEntrega.ConcluidaPorOutroCaminho concluidaPorOutroCaminho -> {
+                meterRegistry.counter("efetivacao_anomalias_total", "tipo", "CONCLUSAO_CONCORRENTE").increment();
+                if (concluidaPorOutroCaminho.contraditoria()) {
+                    meterRegistry.counter("efetivacao_anomalias_total", "tipo", "CONCLUSAO_CONCORRENTE_CONTRADITORIA")
+                            .increment();
+                }
+            }
         }
     }
 

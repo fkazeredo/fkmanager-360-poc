@@ -51,6 +51,12 @@ services:
       # para as jornadas E2E -- deliberadamente separado do contrato funcional, nunca ativo em
       # producao real.
       SPRING_PROFILES_ACTIVE: local
+      # #0005: confirma o resultado de uma efetivacao chamando de volta o servico-credito,
+      # maquina-a-maquina (client_credentials). Identidade de client propria do simulador.
+      AUTH_SERVER_ISSUER_URI: http://servidor-autorizacao:9000
+      AUTH_SERVER_SIMULADOR_CLIENT_ID: ${AUTH_SERVER_SIMULADOR_CLIENT_ID}
+      AUTH_SERVER_SIMULADOR_CLIENT_SECRET: ${AUTH_SERVER_SIMULADOR_CLIENT_SECRET}
+      CREDITO_CALLBACK_URL: http://servico-credito:8083/callbacks/efetivacoes
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/actuator/health"]
       interval: 5s
@@ -77,6 +83,10 @@ services:
       # contra servico-carteira-clientes (ADR-0015).
       AUTH_SERVER_CREDITO_CLIENT_ID: ${AUTH_SERVER_CREDITO_CLIENT_ID}
       AUTH_SERVER_CREDITO_CLIENT_SECRET: ${AUTH_SERVER_CREDITO_CLIENT_SECRET}
+      # Identidade de client propria do simulador-core-legado (#0005), client_credentials --
+      # confirma o resultado de uma efetivacao chamando de volta o servico-credito.
+      AUTH_SERVER_SIMULADOR_CLIENT_ID: ${AUTH_SERVER_SIMULADOR_CLIENT_ID}
+      AUTH_SERVER_SIMULADOR_CLIENT_SECRET: ${AUTH_SERVER_SIMULADOR_CLIENT_SECRET}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/.well-known/openid-configuration"]
       interval: 5s

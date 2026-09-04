@@ -1,10 +1,12 @@
 package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
+import com.fkmanager360.simuladorcorelegado.adapter.in.scheduling.ProcessadorEfetivacaoLegado;
 import com.fkmanager360.simuladorcorelegado.domain.ContaLegadoRecord;
 import com.fkmanager360.simuladorcorelegado.domain.ContasLegadoStore;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.DecisaoDeTransporte;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.RegistroEfetivacao;
+import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.ResultadoRegistroAceite;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -24,9 +26,11 @@ import java.util.Optional;
 
 /**
  * A operacao funcional de efetivacao (spec, secao "Contrato do simulador-core-legado"; plano
- * #0004, secao 7): recepcao da instrucao com deduplicacao por {@code idEft} e devolucao de
- * {@code numPrt}. Nao aplica a alteracao de fato no {@link ContasLegadoStore} -- confirmacao e
- * callback pertencem a #0005; consulta de status a #0006.
+ * #0004, secao 7; ticket #0005): recepcao da instrucao com deduplicacao por {@code idEft} e
+ * devolucao de {@code numPrt}. A alteracao de fato em {@link ContasLegadoStore} e o disparo do
+ * callback de confirmacao acontecem de forma ASSINCRONA, apos um atraso curto, via
+ * {@link ProcessadorEfetivacaoLegado} -- nunca sincronamente dentro desta chamada, porque o
+ * aceite nao e conclusao (spec). Consulta de status por protocolo/idEft pertence a #0006.
  *
  * <p>Sem autenticacao, pela mesma decisao consciente registrada em {@code ClienteLegadoController}.
  */
@@ -37,6 +41,7 @@ public class EfetivacaoLegadoController {
 
     private final EfetivacoesLegadoStore store;
     private final ContasLegadoStore contasStore;
+    private final ProcessadorEfetivacaoLegado processador;
 
     @Operation(
             operationId = "efetivarLimiteLegado",
@@ -45,9 +50,9 @@ public class EfetivacaoLegadoController {
                     + "host-centric numerico. A MESMA instrucao reenviada (mesmo idEft, mesmo payload) nunca "
                     + "aplica a alteracao duas vezes e devolve o MESMO numPrt; o mesmo idEft com payload "
                     + "diferente e sempre rejeitado explicitamente (codRet 207), nunca tratado como operacao "
-                    + "nova. Esta operacao NAO aplica a alteracao no limite consultado por "
-                    + "/legado/contas/consulta-credito -- confirmacao e callback pertencem a #0005; consulta "
-                    + "de status por protocolo/idEft a #0006.")
+                    + "nova. Esta operacao NAO aplica a alteracao sincronamente -- o novo limite so passa a "
+                    + "valer para /legado/contas/consulta-credito, e o callback so e disparado, apos o "
+                    + "processamento assincrono (#0005). Consulta de status por protocolo/idEft pertence a #0006.")
     @ApiResponses({
             @ApiResponse(responseCode = "200",
                     description = "Requisicao processada -- aceite, uma das quatro classes de falha "
@@ -85,7 +90,9 @@ public class EfetivacaoLegadoController {
         DecisaoDeTransporte decisao = store.consumirCenario(requisicao.numCta());
 
         if (decisao instanceof DecisaoDeTransporte.Responder503Registrando) {
-            store.registrarAceite(requisicao.idEft(), requisicao.numCta(), requisicao.vlrLimChqEspEsp(), requisicao.vlrLimNov());
+            // O aceite E registrado (processamento assincrono agendado, #0005) -- so a RESPOSTA
+            // se perde. E exatamente esse descompasso que produz o callback antecipado real.
+            registrarAceiteEAgendarProcessamento(requisicao);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         if (decisao instanceof DecisaoDeTransporte.Responder503SemRegistrar) {
@@ -109,9 +116,25 @@ public class EfetivacaoLegadoController {
             return ResponseEntity.ok(EfetivacaoLegadoResponse.instrucaoInvalida(requisicao));
         }
 
-        RegistroEfetivacao novo = store.registrarAceite(
-                requisicao.idEft(), requisicao.numCta(), requisicao.vlrLimChqEspEsp(), requisicao.vlrLimNov());
+        RegistroEfetivacao novo = registrarAceiteEAgendarProcessamento(requisicao);
         return ResponseEntity.ok(EfetivacaoLegadoResponse.aceite(requisicao, novo.numPrt()));
+    }
+
+    /**
+     * {@code criadoAgora} (#0005, guardrail do Owner) e o que impede que uma dedup concorrente
+     * (duas chamadas simultaneas para o MESMO {@code idEft}, ambas passando pela checagem de
+     * {@code buscarAceite} antes de qualquer uma commitar) agende o processamento duas vezes --
+     * so a execucao que efetivamente CRIOU o registro em {@link EfetivacoesLegadoStore} agenda.
+     */
+    private RegistroEfetivacao registrarAceiteEAgendarProcessamento(EfetivacaoLegadoRequest requisicao) {
+        ResultadoRegistroAceite resultado = store.registrarAceite(
+                requisicao.idEft(), requisicao.numCta(), requisicao.vlrLimChqEspEsp(), requisicao.vlrLimNov());
+        if (resultado.criadoAgora()) {
+            processador.agendarProcessamento(
+                    requisicao.idEft(), requisicao.numCta(), resultado.registro().numPrt(),
+                    requisicao.vlrLimNov(), requisicao.idCor());
+        }
+        return resultado.registro();
     }
 
     private static boolean payloadCompativel(RegistroEfetivacao registro, EfetivacaoLegadoRequest requisicao) {

@@ -1,5 +1,6 @@
 package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
+import com.fkmanager360.simuladorcorelegado.adapter.in.scheduling.ProcessadorEfetivacaoLegado;
 import com.fkmanager360.simuladorcorelegado.domain.ContasLegadoStore;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore;
 import com.jayway.jsonpath.JsonPath;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
@@ -19,7 +21,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Prova o proprio contrato de {@code /legado/efetivacoes} (plano #0004, secao 7): deduplicacao
  * funcional por {@code idEft}, payload incompativel e as quatro classes de falha definitiva. O
  * control plane (cenarios de transporte) e provado em S5 contra o container real, ja que so faz
- * sentido ativo num profile (ADR-0018).
+ * sentido ativo num profile (ADR-0018). O processamento assincrono (#0005) e mockado -- este
+ * teste prova so a resposta SINCRONA do aceite, nunca o efeito assincrono (isso e
+ * {@code ProcessadorEfetivacaoLegadoTest}).
  */
 @WebMvcTest(EfetivacaoLegadoController.class)
 @Import({ContasLegadoStore.class, EfetivacoesLegadoStore.class})
@@ -33,6 +37,9 @@ class EfetivacaoLegadoControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private ProcessadorEfetivacaoLegado processador;
 
     @Test
     void aceite_novaEfetivacao_devolveNumPrt() throws Exception {

@@ -5,7 +5,7 @@ info:
     \ (ADR-0004). Nao devolve dados cadastrais do Cliente (pertencem a CarteiraClientes)\
     \ nem a ClassificacaoRiscoCreditoBase (insumo interno da politica). Toda resposta\
     \ de erro carrega `codigo` estavel do dominio em ProblemDetail."
-  version: "0003"
+  version: "0005"
 servers:
 - url: http://localhost:8083
   description: "Rede interna do Docker Compose, porta exposta localmente para dev."
@@ -14,6 +14,8 @@ tags:
   description: Submissao da SolicitacaoAumentoLimite e decisao automatica.
 - name: limite
   description: Leitura do LimiteChequeEspecialVigente reconhecido pelo CoreLegado.
+- name: callback
+  description: Confirmacao autoritativa do resultado de uma efetivacao pelo CoreLegado.
 paths:
   /clientes/{clienteId}/contas/{contaId}/solicitacoes-aumento-limite:
     post:
@@ -123,6 +125,45 @@ paths:
       security:
       - bearerJwt:
         - credito.escrita
+  /callbacks/efetivacoes:
+    post:
+      tags:
+      - callback
+      summary: Callback autoritativo do CoreLegado com o resultado de uma efetivacao
+      description: "Correlaciona por idEft. Duplicado identico, antecipado com relacao\
+        \ ao aceite e contraditorio sobre estado terminal sao tratados sem reescrever\
+        \ nada indevidamente -- ver corpo da resposta para a distincao tecnica entre\
+        \ os quatro sub-casos de 200."
+      operationId: confirmarEfetivacao
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallbackEfetivacaoRequest"
+        required: true
+      responses:
+        "200":
+          description: "Processado, duplicado identico, conflito registrado ou anomalia\
+            \ registrada -- ver corpo. Sempre 2xx mesmo em contradicao, para nao transformar\
+            \ inconsistencia semantica em tempestade de redelivery."
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CallbackEfetivacaoResponse"
+        "400":
+          description: "Payload malformado: idEft nao e UUID valido, ou vlrLimEft\
+            \ ausente/ilegivel quando codRet=\"000\"."
+        "401":
+          description: "Sem token, expirado, assinatura/issuer/audience invalidos."
+        "403":
+          description: Sem escopo credito.callback.
+        "404":
+          description: "idEft desconhecido -- registrado como ocorrencia; endpoint\
+            \ autenticado maquina-a-maquina, sem enumeracao a proteger perante o proprio\
+            \ Core."
+      security:
+      - bearerJwt:
+        - credito.callback
   /clientes/{clienteId}/contas/{contaId}/limite-cheque-especial-vigente:
     get:
       tags:
@@ -321,6 +362,57 @@ components:
         properties:
           type: object
           additionalProperties: {}
+    CallbackEfetivacaoRequest:
+      type: object
+      properties:
+        idEft:
+          type: string
+          description: EfetivacaoId por extenso (UUID) -- chave de correlacao funcional
+            do callback.
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        numPrt:
+          type: string
+          description: "ProtocoloCore -- sempre presente, porque todo callback pressupoe\
+            \ aceite previo."
+          example: "000000000001"
+        codRet:
+          type: string
+          description: "\"000\" sucesso; \"121\" conta inexistente; \"118\" conta\
+            \ bloqueada; \"205\" limite vigente divergente; \"199\" instrucao invalida;\
+            \ qualquer outro valor e codigo desconhecido (anomalia registrada, nao\
+            \ conclui nada)."
+          example: "000"
+        vlrLimEft:
+          type: string
+          description: "LimiteEfetivado. Obrigatorio quando codRet=\"000\"; ausente\
+            \ nos demais casos. Centavos, sem separador."
+          example: 600000
+        dtaPrc:
+          type: string
+          description: "Instante de processamento no Core, quando disponivel. Metadado,\
+            \ nao autoritativo."
+        idCor:
+          type: string
+          description: "CorrelationId por extenso (UUID), ecoado como metadado. Nunca\
+            \ chave de negocio nem campo autoritativo -- Credito recupera o seu proprio\
+            \ pelo EfetivacaoId."
+          example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+      required:
+      - codRet
+      - idEft
+      - numPrt
+    CallbackEfetivacaoResponse:
+      type: object
+      properties:
+        resultado:
+          type: string
+          description: "PROCESSADO (concluiu agora); JA_CONCLUIDA (duplicado identico,\
+            \ AC13); CONFLITO_REGISTRADO (contraditorio sobre terminal, AC17); ANOMALIA_REGISTRADA\
+            \ (sucesso incoerente AC26, protocolo divergente, ou codRet desconhecido)\
+            \ -- todos 200."
+        detalhe:
+          type: string
+          description: "Detalhe tecnico opcional, nunca destinado a decisao do chamador."
     LimiteChequeEspecialVigenteResponse:
       type: object
       properties:

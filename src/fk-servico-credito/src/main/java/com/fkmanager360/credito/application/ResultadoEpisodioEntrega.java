@@ -1,6 +1,7 @@
 package com.fkmanager360.credito.application;
 
 import com.fkmanager360.credito.domain.MotivoFalhaEfetivacao;
+import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -47,6 +48,20 @@ public sealed interface ResultadoEpisodioEntrega {
 
     /** Resposta indeterminada: o dispatcher para sem concluir nada (OD-3). */
     record Indeterminada() implements ResultadoEpisodioEntrega {
+    }
+
+    /**
+     * O callback (#0005) ja concluiu a solicitacao antes desta chamada sob claim aplicar a falha
+     * definitiva que o dispatcher trazia -- o terminal persistido venceu (regra normativa do
+     * Owner), e a entrega termina tecnicamente de acordo com ele, nunca com o resultado perdedor
+     * do dispatcher. {@code contraditoria} sinaliza que o resultado perdedor nao apenas chegou
+     * depois, mas divergia do vencedor (anomalia adicional, alem da propria concorrencia).
+     */
+    record ConcluidaPorOutroCaminho(StatusSolicitacaoAumentoLimite terminalObservado, boolean contraditoria)
+            implements ResultadoEpisodioEntrega {
+        public ConcluidaPorOutroCaminho {
+            Objects.requireNonNull(terminalObservado, "terminalObservado e obrigatorio");
+        }
     }
 
     /** O claimId usado nao era mais o corrente -- nenhum efeito foi aplicado (fencing). */

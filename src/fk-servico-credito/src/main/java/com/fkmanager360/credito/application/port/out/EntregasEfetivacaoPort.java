@@ -1,6 +1,7 @@
 package com.fkmanager360.credito.application.port.out;
 
 import com.fkmanager360.credito.domain.ProtocoloCore;
+import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -62,4 +63,16 @@ public interface EntregasEfetivacaoPort {
      * dele, na mesma unidade, pela composicao de {@code RegistrarResultadoEfetivacao}.
      */
     void terminalizarPorFalhaDefinitiva(EntregaEfetivacaoReclamada claim, Instant agora);
+
+    /**
+     * Fecha a entrega quando outro caminho (callback, #0005) ja terminalizou a solicitacao antes
+     * desta chamada sob claim aplicar a falha definitiva que o dispatcher trazia -- o terminal
+     * PERSISTIDO e autoritativo, e dita como a entrega termina tecnicamente, nunca o resultado
+     * perdedor do dispatcher: {@code EFETIVADA} vira {@code ACEITA} (a instrucao efetivamente foi
+     * aceita e concluida, so que por outro caminho); {@code FALHA_EFETIVACAO} vira
+     * {@code FALHA_DEFINITIVA}. Mesma exigencia de transacao ativa de {@link #claimAindaValido},
+     * chamada na mesma unidade pela composicao de {@code RegistrarResultadoEfetivacao}.
+     */
+    void terminalizarPorConclusaoConcorrente(
+            EntregaEfetivacaoReclamada claim, StatusSolicitacaoAumentoLimite terminalObservado, Instant agora);
 }

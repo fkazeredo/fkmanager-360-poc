@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { readDemoCredentials } from './demo-credentials';
+import { pollCreditoDbScalarUntil, queryCreditoDbScalar } from './db-credito';
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 
@@ -288,14 +289,21 @@ test.describe('Jornada 1 -- primeiros passos', () => {
   });
 
   /**
-   * #0003 estende a jornada 1: submissao -> decisao automatica -> AGUARDANDO_EFETIVACAO
-   * (AC1 parcial, AC29 parcial). Usa a conta 10002 (SEGUNDA conta do cliente 1, risco MEDIO,
-   * vigente R$ 1.200,00) -- deliberadamente NAO a 10001, que fica livre em SOLICITADA/estado
-   * terminal nenhum para que os testes de AC22/AC29 acima continuem repetiveis. Um incremento de
-   * R$ 800,00 (vigente 1.200,00 -> solicitado 2.000,00) fica dentro da politica v1 (risco MEDIO
-   * permitido, total <= R$ 10.000,00, incremento <= R$ 2.000,00) -> APROVADA.
+   * #0003 iniciou a jornada 1 ate AGUARDANDO_EFETIVACAO; #0005 a fecha. Usa a conta 10002
+   * (SEGUNDA conta do cliente 1, risco MEDIO, vigente R$ 1.200,00) -- deliberadamente NAO a
+   * 10001, que fica livre em SOLICITADA/estado terminal nenhum para que os testes de AC22/AC29
+   * acima continuem repetiveis. Um incremento de R$ 800,00 (vigente 1.200,00 -> solicitado
+   * 2.000,00) fica dentro da politica v1 (risco MEDIO permitido, total <= R$ 10.000,00,
+   * incremento <= R$ 2.000,00) -> APROVADA.
+   *
+   * Semantica temporal normativa (AC29): aprovacao nao altera limite; aceite da instrucao nao
+   * altera limite; o Core processa a efetivacao e SO ENTAO seu valor autoritativo muda; o
+   * callback comunica essa confirmacao; Credito converge para EFETIVADA. O Core pode
+   * legitimamente mudar o vigente ANTES do commit local de EFETIVADA (os dois nao sao atomicos
+   * entre si) -- este teste nao afirma ordem temporal absoluta entre as duas escritas, so
+   * convergencia eventual e coerencia final.
    */
-  test('AC1/AC29 (parcial): submissao dentro da politica automatica aprova e mostra o vigente do Core junto do solicitado pendente', async ({
+  test('AC1/AC29: submissao aprovada converge para EFETIVADA, e o vigente exibido so muda apos a confirmacao autoritativa', async ({
     page,
   }) => {
     await logInAs(page, credentials['gerente.a'].login, credentials['gerente.a'].senha);
@@ -309,23 +317,64 @@ test.describe('Jornada 1 -- primeiros passos', () => {
     await expect(contas.nth(1)).toBeVisible();
     await contas.nth(1).click();
 
-    const limiteInicial = atendimento.locator('.limite-vigente .valor');
-    await expect(limiteInicial).toHaveText(/R\$\s*1\.200,00/);
+    const limiteVigente = atendimento.locator('.limite-vigente .valor');
+    await expect(limiteVigente).toHaveText(/R\$\s*1\.200,00/);
 
     const formulario = atendimento.locator('.solicitacao-aumento-limite');
     await expect(formulario).toBeVisible();
     await formulario.locator('.limite-solicitado').fill('2000,00');
+
+    const respostaSubmissao = page.waitForResponse(
+      (resposta) => resposta.url().includes('/solicitacoes-aumento-limite') && resposta.request().method() === 'POST',
+    );
     await formulario.locator('button[type=submit]').click();
+    const solicitacaoId = (await (await respostaSubmissao).json()).solicitacaoId as string;
+    expect(solicitacaoId).toMatch(/^[0-9a-f-]{36}$/);
 
     const decisao = atendimento.locator('.decisao');
     await expect(decisao).toBeVisible();
     await expect(decisao).toHaveClass(/aprovada/);
     await expect(decisao.locator('.status-solicitacao')).toContainText('AGUARDANDO_EFETIVACAO');
 
-    // O vigente confirmado pelo Core continua sendo o ANTIGO -- o solicitado aparece marcado
-    // como pendente, nunca substituindo o vigente antes da confirmacao autoritativa (AC29).
+    // Imediatamente apos a aprovacao: o vigente confirmado pelo Core continua sendo o ANTIGO --
+    // o solicitado aparece marcado como pendente, nunca substituindo o vigente antes da
+    // confirmacao autoritativa (AC29).
     await expect(decisao.locator('.limite-vigente-confirmado')).toHaveText(/R\$\s*1\.200,00/);
     await expect(decisao.locator('.limite-pendente')).toContainText(/R\$\s*2\.000,00/);
     await expect(decisao.locator('.limite-pendente')).toContainText('aguardando confirmacao do Core');
+
+    // Eventualmente a leitura autoritativa do Core, atravessando de novo a ACL de Credito e a
+    // composicao do BFF, passa a apresentar o novo vigente -- reselecionar a conta (saindo dela e
+    // voltando, para garantir uma nova consulta mesmo que o valor ja tenha ficado igual entre
+    // tentativas de poll) forca a releitura.
+    await expect(async () => {
+      await contas.nth(0).click();
+      await contas.nth(1).click();
+      await expect(limiteVigente).toHaveText(/R\$\s*2\.000,00/);
+    }).toPass({ timeout: 15_000, intervals: [500] });
+
+    // Estado final coerente entre o processo de Credito e o Core (AC1): EFETIVADA, protocolo_core
+    // preenchido, e cada fato do historico funcional exatamente uma vez -- nenhuma duplicacao sob
+    // o callback (AC13) nem sob a convergencia com o dispatcher (AC14).
+    await pollCreditoDbScalarUntil(
+      `select status from solicitacao_aumento_limite where id = '${solicitacaoId}'`,
+      'EFETIVADA',
+    );
+    expect(
+      queryCreditoDbScalar(`select protocolo_core is not null from solicitacao_aumento_limite where id = '${solicitacaoId}'`),
+    ).toBe('t');
+    for (const tipoFato of [
+      'SOLICITACAO_REGISTRADA',
+      'DECISAO_AUTOMATICA_REGISTRADA',
+      'EFETIVACAO_SOLICITADA',
+      'INSTRUCAO_ACEITA_PELO_CORE',
+      'RESULTADO_EFETIVACAO_REGISTRADO',
+    ]) {
+      expect(
+        queryCreditoDbScalar(
+          `select count(*) from historico_solicitacao where solicitacao_id = '${solicitacaoId}' and tipo_fato = '${tipoFato}'`,
+        ),
+      ).toBe('1');
+    }
   });
 });

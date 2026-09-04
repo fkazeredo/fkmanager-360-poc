@@ -41,9 +41,20 @@ public class RegisteredClientsConfig {
     static final String SCOPE_CARTEIRA_LEITURA = "carteira.leitura";
     static final String SCOPE_CREDITO_LEITURA = "credito.leitura";
     static final String SCOPE_CREDITO_ESCRITA = "credito.escrita";
+    static final String SCOPE_CREDITO_CALLBACK = "credito.callback";
 
     static final String AUD_CARTEIRA_CLIENTES = "servico-carteira-clientes";
     static final String AUD_CREDITO = "servico-credito";
+
+    /**
+     * Client setting proprio de {@code client_credentials} (#0005): distinto de
+     * {@link TokenExchangePolicyAuthenticationProvider#ALLOWED_TARGETS_SETTING} porque
+     * {@code client_credentials} nao e uma troca -- o client so tem UM destino possivel, fixo, e
+     * {@link TokenClaimsCustomizerConfig} o le para colocar {@code aud} no token emitido (sem
+     * isto, o token sairia sem audience e seria recusado pelo {@code AudienceValidator} do
+     * Resource Server -- so o ramo TOKEN_EXCHANGE do customizer preenchia {@code aud} ate aqui).
+     */
+    static final String CLIENT_CREDENTIALS_AUDIENCE_SETTING = "fk.client-credentials.audience";
 
     @Bean
     RegisteredClientRepository registeredClientRepository(
@@ -53,7 +64,9 @@ public class RegisteredClientsConfig {
             @Value("${servidor-autorizacao.bff-client.redirect-uri}") String redirectUri,
             @Value("${servidor-autorizacao.bff-client.post-logout-redirect-uri}") String postLogoutRedirectUri,
             @Value("${servidor-autorizacao.credito-client.client-id}") String creditoClientId,
-            @Value("${servidor-autorizacao.credito-client.client-secret}") String creditoClientSecret) {
+            @Value("${servidor-autorizacao.credito-client.client-secret}") String creditoClientSecret,
+            @Value("${servidor-autorizacao.simulador-client.client-id}") String simuladorClientId,
+            @Value("${servidor-autorizacao.simulador-client.client-secret}") String simuladorClientSecret) {
 
         RegisteredClient bffGerente = RegisteredClient.withId("bff-gerente-client")
                 .clientId(bffClientId)
@@ -106,6 +119,25 @@ public class RegisteredClientsConfig {
                         .build())
                 .build();
 
-        return new InMemoryRegisteredClientRepository(bffGerente, servicoCredito);
+        // #0005: o CoreLegado confirma o resultado de uma efetivacao chamando de volta o
+        // servico-credito, maquina-a-maquina. client_credentials, nunca token exchange -- este
+        // client nao continua uma operacao de usuario, age em nome de si mesmo. Um unico scope,
+        // de proposito: este client nao pode pedir credito.leitura, credito.escrita nem qualquer
+        // outra coisa.
+        RegisteredClient simuladorCoreLegado = RegisteredClient.withId("simulador-core-legado-client")
+                .clientId(simuladorClientId)
+                .clientSecret(passwordEncoder.encode(simuladorClientSecret))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope(SCOPE_CREDITO_CALLBACK)
+                .clientSettings(ClientSettings.builder()
+                        .setting(CLIENT_CREDENTIALS_AUDIENCE_SETTING, AUD_CREDITO)
+                        .build())
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenTimeToLive(Duration.ofMinutes(5))
+                        .build())
+                .build();
+
+        return new InMemoryRegisteredClientRepository(bffGerente, servicoCredito, simuladorCoreLegado);
     }
 }

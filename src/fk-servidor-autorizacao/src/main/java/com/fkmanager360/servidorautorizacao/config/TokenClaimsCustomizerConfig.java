@@ -47,10 +47,28 @@ public class TokenClaimsCustomizerConfig {
 
             if (AuthorizationGrantType.TOKEN_EXCHANGE.equals(context.getAuthorizationGrantType())) {
                 applyTokenExchangeClaims(context, ownJwtDecoder);
+            } else if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
+                applyClientCredentialsAudience(context);
             } else {
                 applyAuthenticatedPrincipalRoles(context);
             }
         };
+    }
+
+    /**
+     * {@code client_credentials} (#0005): o unico destino possivel deste client e fixo, registrado
+     * como {@link RegisteredClientsConfig#CLIENT_CREDENTIALS_AUDIENCE_SETTING} na propria
+     * {@code RegisteredClient} -- sem isso o token sairia sem {@code aud} e seria recusado pelo
+     * {@code AudienceValidator} do Resource Server (so o ramo de Token Exchange preenchia
+     * audience ate #0005). Nunca carrega {@code papeis}: maquina-a-maquina nao tem sujeito humano,
+     * e so IdentidadeEAcesso emite papel para quem tem (CONTEXT-MAP.md).
+     */
+    private void applyClientCredentialsAudience(JwtEncodingContext context) {
+        String audience = context.getRegisteredClient().getClientSettings()
+                .getSetting(RegisteredClientsConfig.CLIENT_CREDENTIALS_AUDIENCE_SETTING);
+        if (audience != null && !audience.isBlank()) {
+            context.getClaims().audience(List.of(audience));
+        }
     }
 
     private void applyTokenExchangeClaims(JwtEncodingContext context, JwtDecoder ownJwtDecoder) {

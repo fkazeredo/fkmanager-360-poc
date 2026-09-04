@@ -2,6 +2,7 @@ package com.fkmanager360.simuladorcorelegado.domain;
 
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,11 +17,18 @@ import java.util.Optional;
  * jornada vertical continue coerente ponta a ponta. Os valores de limite, situacao e risco variam
  * deliberadamente entre as contas -- sao dados de demonstracao, nao um desenho de cenarios de
  * politica de credito, que nem existe neste ticket.
+ *
+ * <p>{@code Collections.synchronizedMap} sobre {@code LinkedHashMap}, e nao
+ * {@code ConcurrentHashMap}, desde #0005: {@link #aplicarLimiteChequeEspecial} muta um registro
+ * apos o processamento assincrono da efetivacao, concorrentemente com leituras de
+ * {@link #findByNumCta} -- mas {@code findByCodCli} depende da ORDEM DE INSERCAO do seed (prova
+ * ja existente em {@code ContaLegadoControllerTest}), que {@code LinkedHashMap} preserva e um
+ * {@code put} sobre chave EXISTENTE nao altera.
  */
 @Component
 public class ContasLegadoStore {
 
-    private final Map<String, ContaLegadoRecord> records = new LinkedHashMap<>();
+    private final Map<String, ContaLegadoRecord> records = Collections.synchronizedMap(new LinkedHashMap<>());
 
     public ContasLegadoStore() {
         // Carteira do gerente A. O cliente 0000000001 tem duas contas: sem isso, "escolher a
@@ -50,11 +58,34 @@ public class ContasLegadoStore {
         records.put(numCta, new ContaLegadoRecord(numCta, codAge, codCli, sitCta, vlrLimChqEsp, codRscCrd, datAtuLim));
     }
 
+    /**
+     * {@code synchronized} explicito, nao so o wrapper de {@link #records}: o contrato de
+     * {@link Collections#synchronizedMap} exige sincronizar manualmente na propria trava do mapa
+     * para ITERAR sobre qualquer uma das suas views (aqui, {@code values().stream()}) -- sem isso,
+     * a iteracao concorrente com {@link #aplicarLimiteChequeEspecial} nao tem happens-before
+     * garantido pela JLS, mesmo com o wrapper sincronizando cada chamada individual.
+     */
     public List<ContaLegadoRecord> findByCodCli(String codCli) {
-        return records.values().stream().filter(conta -> conta.codCli().equals(codCli)).toList();
+        synchronized (records) {
+            return records.values().stream().filter(conta -> conta.codCli().equals(codCli)).toList();
+        }
     }
 
     public Optional<ContaLegadoRecord> findByNumCta(String numCta) {
         return Optional.ofNullable(records.get(numCta));
+    }
+
+    /**
+     * #0005: aplica de fato o novo {@code LimiteChequeEspecial} apos o processamento assincrono
+     * da efetivacao -- e o que faz {@link #findByNumCta} (consultado por
+     * {@code /legado/contas/consulta-credito}, a ACL de Credito) refletir o vigente novo depois da
+     * confirmacao. {@code computeIfPresent} substitui so o VALOR de uma chave ja existente -- nao
+     * e modificacao estrutural do mapa, entao nao interfere com iteracao concorrente em
+     * {@link #findByCodCli}. Conta desconhecida (nunca deveria acontecer -- so quem ja teve a
+     * conta validada no aceite chega aqui) e silenciosamente ignorada.
+     */
+    public void aplicarLimiteChequeEspecial(String numCta, String novoVlrLimChqEsp) {
+        records.computeIfPresent(numCta, (chave, atual) -> new ContaLegadoRecord(
+                atual.numCta(), atual.codAge(), atual.codCli(), atual.sitCta(), novoVlrLimChqEsp, atual.codRscCrd(), atual.datAtuLim()));
     }
 }

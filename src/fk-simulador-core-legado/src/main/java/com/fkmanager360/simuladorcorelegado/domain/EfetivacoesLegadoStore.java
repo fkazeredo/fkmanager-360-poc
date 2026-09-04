@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -54,14 +55,35 @@ public class EfetivacoesLegadoStore {
     private final Map<String, CenarioEfetivacao> cenariosPorConta = new ConcurrentHashMap<>();
     private final AtomicLong proximoNumeroDeProtocolo = new AtomicLong(1);
 
+    /**
+     * {@code criadoAgora=true} quando ESTA chamada foi quem criou o registro -- so ela deve
+     * agendar/processar a efetivacao (#0005: mutar {@code ContasLegadoStore} e disparar o
+     * callback). As demais chamadas concorrentes para o mesmo {@code idEft} (dedup) observam
+     * {@code criadoAgora=false} e nao devem processar de novo.
+     */
+    public record ResultadoRegistroAceite(RegistroEfetivacao registro, boolean criadoAgora) {
+    }
+
     public Optional<RegistroEfetivacao> buscarAceite(String idEft) {
         return Optional.ofNullable(aceitesPorIdEft.get(idEft));
     }
 
-    /** Atomico sob concorrencia real: {@code numPrt} e gerado uma UNICA vez por {@code idEft}. */
-    public RegistroEfetivacao registrarAceite(String idEft, String numCta, String vlrLimChqEspEsp, String vlrLimNov) {
-        return aceitesPorIdEft.computeIfAbsent(idEft, id -> new RegistroEfetivacao(
-                numCta, vlrLimChqEspEsp, vlrLimNov, "%012d".formatted(proximoNumeroDeProtocolo.getAndIncrement())));
+    /**
+     * Atomico sob concorrencia real: {@code numPrt} e gerado uma UNICA vez por {@code idEft}, e
+     * {@code criadoAgora} e {@code true} para NO MAXIMO uma chamada concorrente para o mesmo
+     * {@code idEft} -- {@link ConcurrentHashMap#computeIfAbsent} garante que a funcao de mapeamento
+     * roda no maximo uma vez por chave, entao o {@link AtomicBoolean} local so e setado {@code true}
+     * na execucao que efetivamente criou o registro (#0005, guardrail do Owner: so essa execucao
+     * agenda/processa a efetivacao).
+     */
+    public ResultadoRegistroAceite registrarAceite(String idEft, String numCta, String vlrLimChqEspEsp, String vlrLimNov) {
+        AtomicBoolean criadoAgora = new AtomicBoolean(false);
+        RegistroEfetivacao registro = aceitesPorIdEft.computeIfAbsent(idEft, id -> {
+            criadoAgora.set(true);
+            return new RegistroEfetivacao(
+                    numCta, vlrLimChqEspEsp, vlrLimNov, "%012d".formatted(proximoNumeroDeProtocolo.getAndIncrement()));
+        });
+        return new ResultadoRegistroAceite(registro, criadoAgora.get());
     }
 
     // --- Control plane (perfis local/demo/test, ADR-0018) -------------------------------------

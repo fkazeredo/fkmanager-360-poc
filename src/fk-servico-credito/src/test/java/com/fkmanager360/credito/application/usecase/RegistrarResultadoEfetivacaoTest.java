@@ -26,27 +26,28 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * S2 (ADR-0018): {@code RegistrarResultadoEfetivacao} e o unico caso de uso de conclusao (ticket
- * #0004, Objetivo) -- este teste prova a orquestracao com fakes comportamentais pequenos que
- * reusam o MESMO {@link SolicitacaoAumentoLimite} de dominio (a maquina de estados ja exaustiva em
- * S1 desde #0003), nao uma segunda implementacao da regra de transicao. A entrada
- * {@code executarSobClaim} e provada aqui na composicao (fencing -> conclusao -> terminalizacao);
- * a atomicidade real contra PostgreSQL e provada em S3.
+ * #0004, Objetivo) -- este teste prova a orquestracao com um fake comportamental que reproduz a
+ * MESMA classificacao terminal em tres eixos (protocolo, resultado/motivo, limite efetivado) que
+ * {@code JpaResultadoEfetivacaoAdapter} implementa contra PostgreSQL (S3), sobre o MESMO
+ * {@link SolicitacaoAumentoLimite} de dominio (a maquina de estados ja exaustiva em S1 desde
+ * #0003) -- nenhuma segunda tabela de transicoes. A entrada {@code executarSobClaim} e provada
+ * aqui na composicao (fencing -&gt; conclusao -&gt; terminalizacao); a atomicidade real contra
+ * PostgreSQL, incluindo a unidade transacional unica e a ordem de locks, e provada em S3.
  */
 class RegistrarResultadoEfetivacaoTest {
 
     private static final EfetivacaoId EFETIVACAO_ID = new EfetivacaoId(UUID.randomUUID());
     private static final AtorOperacao AUTOR = AtorSistema.CORE_LEGADO;
     private static final Instant AGORA = Instant.parse("2026-09-03T12:00:00Z");
+    private static final long LIMITE_SOLICITADO_CONGELADO = 600_000L;
 
     /** {@code TransacaoPort} de teste: executa a unidade diretamente (S2 nao prova atomicidade). */
     private static final TransacaoPort TRANSACAO_PASSA_DIRETO = new TransacaoPort() {
@@ -65,59 +66,143 @@ class RegistrarResultadoEfetivacaoTest {
                 UUID.randomUUID(),
                 new IntencaoEfetivacao(
                         EFETIVACAO_ID, UUID.randomUUID(), new ContaId("10001"),
-                        new LimiteChequeEspecialVigente(500_000), new LimiteSolicitado(600_000),
+                        new LimiteChequeEspecialVigente(500_000), new LimiteSolicitado(LIMITE_SOLICITADO_CONGELADO),
                         new CorrelationId(UUID.randomUUID())),
                 new SolicitacaoId(UUID.randomUUID()),
                 1);
     }
 
+    // --- executar: caminho sem claim (callback/#0005, reconciliacao/#0006) ---------------------
+
     @Test
     void executar_solicitacaoAguardandoEfetivacao_concluiComFalhaDefinitiva() {
-        FakeResultadoEfetivacaoPort fake = new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
         RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
 
         ResultadoRegistroEfetivacao resultado = usecase.executar(
                 EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE),
-                AUTOR, AGORA);
+                Optional.empty(), AUTOR, AGORA);
 
-        assertThat(resultado.concluiuAgora()).isTrue();
-        assertThat(resultado.statusResultante()).isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
-        assertThat(resultado.permanenciaEmAguardandoEfetivacao()).isEqualTo(Duration.ofMinutes(5));
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.Concluida.class);
+        ResultadoRegistroEfetivacao.Concluida concluida = (ResultadoRegistroEfetivacao.Concluida) resultado;
+        assertThat(concluida.statusResultante()).isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
+        assertThat(concluida.permanenciaEmAguardandoEfetivacao()).isEqualTo(Duration.ofMinutes(5));
         assertThat(fake.chamadasDeRegistro).isEqualTo(1);
     }
 
     @Test
-    void executar_duasVezesParaAMesmaEfetivacao_segundaChamadaENoOpIdempotente() {
-        FakeResultadoEfetivacaoPort fake = new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+    void executar_sucessoComLimiteCoerente_concluiComEfetivada() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+        RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
+
+        ResultadoRegistroEfetivacao resultado = usecase.executar(
+                EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.Sucesso(LIMITE_SOLICITADO_CONGELADO),
+                Optional.of(new ProtocoloCore("PRT-1")), AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.Concluida.class);
+        assertThat(((ResultadoRegistroEfetivacao.Concluida) resultado).statusResultante())
+                .isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVADA);
+        assertThat(fake.protocoloCore).isEqualTo("PRT-1");
+    }
+
+    @Test
+    void executar_duasVezesParaAMesmaEfetivacao_segundaChamadaEDuplicadoIdentico() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
         RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
         ResultadoEfetivacaoRecebido resultadoRecebido =
                 new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE);
 
-        ResultadoRegistroEfetivacao primeira = usecase.executar(EFETIVACAO_ID, resultadoRecebido, AUTOR, AGORA);
-        ResultadoRegistroEfetivacao segunda = usecase.executar(EFETIVACAO_ID, resultadoRecebido, AUTOR, AGORA.plusSeconds(1));
+        ResultadoRegistroEfetivacao primeira = usecase.executar(EFETIVACAO_ID, resultadoRecebido, Optional.empty(), AUTOR, AGORA);
+        ResultadoRegistroEfetivacao segunda =
+                usecase.executar(EFETIVACAO_ID, resultadoRecebido, Optional.empty(), AUTOR, AGORA.plusSeconds(1));
 
-        assertThat(primeira.concluiuAgora()).isTrue();
-        assertThat(segunda.concluiuAgora()).isFalse();
-        assertThat(segunda.statusResultante()).isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
+        assertThat(primeira).isInstanceOf(ResultadoRegistroEfetivacao.Concluida.class);
+        assertThat(segunda).isInstanceOf(ResultadoRegistroEfetivacao.JaTerminalIdentica.class);
+        assertThat(((ResultadoRegistroEfetivacao.JaTerminalIdentica) segunda).statusPersistido())
+                .isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
         assertThat(fake.chamadasDeRegistro).isEqualTo(2);
     }
 
     @Test
-    void executar_solicitacaoJaEmOutroEstadoTerminal_naoReescreveENaoConcluiAgora() {
-        FakeResultadoEfetivacaoPort fake = new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.REJEITADA);
-        RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
+    void executar_callbackContraditorioSobreEfetivada_naoReescreveERegistraContradicao() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.terminalEfetivada("PRT-1");
 
-        ResultadoRegistroEfetivacao resultado = usecase.executar(
+        ResultadoRegistroEfetivacao resultado = usecase(fake, new FakeEntregaComClaim(true)).executar(
                 EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.CONTA_INEXISTENTE),
-                AUTOR, AGORA);
+                Optional.empty(), AUTOR, AGORA);
 
-        assertThat(resultado.concluiuAgora()).isFalse();
-        assertThat(resultado.statusResultante()).isEqualTo(StatusSolicitacaoAumentoLimite.REJEITADA);
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.JaTerminalContraditoria.class);
+        assertThat(((ResultadoRegistroEfetivacao.JaTerminalContraditoria) resultado).statusPersistido())
+                .isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVADA);
+        assertThat(fake.protocoloCore).isEqualTo("PRT-1");
+    }
+
+    // --- AC26: sucesso incoerente ---------------------------------------------------------------
+
+    @Test
+    void executar_sucessoComLimiteIncoerente_naoTransicionaERetornaSucessoIncoerente() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+
+        ResultadoRegistroEfetivacao resultado = usecase(fake, new FakeEntregaComClaim(true)).executar(
+                EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.Sucesso(LIMITE_SOLICITADO_CONGELADO + 1),
+                Optional.of(new ProtocoloCore("PRT-1")), AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.SucessoIncoerente.class);
+        assertThat(fake.status).isEqualTo(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+        assertThat(fake.protocoloCore).isNull();
+    }
+
+    // --- Protocolo divergente --------------------------------------------------------------------
+
+    @Test
+    void executar_protocoloDivergenteEmNaoTerminal_naoSobrescreveERetornaProtocoloDivergente() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+        fake.protocoloCore = "PRT-ORIGINAL";
+
+        ResultadoRegistroEfetivacao resultado = usecase(fake, new FakeEntregaComClaim(true)).executar(
+                EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.Sucesso(LIMITE_SOLICITADO_CONGELADO),
+                Optional.of(new ProtocoloCore("PRT-DIVERGENTE")), AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.ProtocoloDivergente.class);
+        assertThat(fake.protocoloCore).isEqualTo("PRT-ORIGINAL");
+        assertThat(fake.status).isEqualTo(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
     }
 
     @Test
+    void executar_protocoloDivergenteSobreTerminalEfetivada_eContraditorioMesmoComValorCoerente() {
+        // EFETIVADA com P1 + sucesso coerente em VALOR mas P2: contraditorio, nunca duplicado --
+        // protocolo e o PRIMEIRO eixo, e ele sozinho decide quando diverge.
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.terminalEfetivada("PRT-1");
+
+        ResultadoRegistroEfetivacao resultado = usecase(fake, new FakeEntregaComClaim(true)).executar(
+                EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.Sucesso(LIMITE_SOLICITADO_CONGELADO),
+                Optional.of(new ProtocoloCore("PRT-2")), AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.JaTerminalContraditoria.class);
+        assertThat(fake.protocoloCore).isEqualTo("PRT-1");
+    }
+
+    @Test
+    void executar_protocoloDivergenteSobreTerminalFalhaEfetivacao_eContraditorioMesmoComMotivoCoerente() {
+        // FALHA_EFETIVACAO com P1 + mesmo motivo mas P2: contraditorio pelo mesmo motivo do teste
+        // acima -- estado semanticamente inalterado.
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.terminalFalha(
+                MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE, "PRT-1");
+
+        ResultadoRegistroEfetivacao resultado = usecase(fake, new FakeEntregaComClaim(true)).executar(
+                EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE),
+                Optional.of(new ProtocoloCore("PRT-2")), AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.JaTerminalContraditoria.class);
+        assertThat(fake.protocoloCore).isEqualTo("PRT-1");
+        assertThat(fake.motivoFalha).isEqualTo(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE);
+    }
+
+    // --- executarSobClaim: composicao fenced ----------------------------------------------------
+
+    @Test
     void executarSobClaim_claimValido_concluiTerminalizaEDevolvePermanencia() {
-        FakeResultadoEfetivacaoPort fake = new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
         FakeEntregaComClaim entrega = new FakeEntregaComClaim(true);
         RegistrarResultadoEfetivacao usecase = usecase(fake, entrega);
 
@@ -129,12 +214,13 @@ class RegistrarResultadoEfetivacaoTest {
         assertThat(((ResultadoConclusaoDefinitiva.Aplicado) resultado).permanenciaEmAguardandoEfetivacao())
                 .isEqualTo(Duration.ofMinutes(5));
         assertThat(fake.chamadasDeRegistro).isEqualTo(1);
-        assertThat(entrega.terminalizacoes).isEqualTo(1);
+        assertThat(entrega.terminalizacoesFalhaDefinitiva).isEqualTo(1);
+        assertThat(entrega.terminalizacoesConcorrentes).isZero();
     }
 
     @Test
     void executarSobClaim_claimObsoleto_descartaSemNenhumaEscrita() {
-        FakeResultadoEfetivacaoPort fake = new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
         FakeEntregaComClaim entrega = new FakeEntregaComClaim(false);
         RegistrarResultadoEfetivacao usecase = usecase(fake, entrega);
 
@@ -144,64 +230,169 @@ class RegistrarResultadoEfetivacaoTest {
 
         assertThat(resultado).isInstanceOf(ResultadoConclusaoDefinitiva.DescartadoClaimObsoleto.class);
         assertThat(fake.chamadasDeRegistro).isZero();
-        assertThat(entrega.terminalizacoes).isZero();
+        assertThat(entrega.terminalizacoesFalhaDefinitiva).isZero();
+        assertThat(entrega.terminalizacoesConcorrentes).isZero();
+    }
+
+    // --- Conclusao concorrente (#0005, guardrail normativo do Owner): duas direcoes -------------
+
+    @Test
+    void executarSobClaim_callbackDeSucessoJaConcluiuEfetivada_dispatcherPerdeAutoridadeDeEscrita() {
+        // (a) dispatcher com claim prepara falha definitiva; callback de sucesso venceu e ja
+        // commitou EFETIVADA antes desta chamada; dispatcher continua. Final: EFETIVADA
+        // preservada, entrega ACEITA, sem motivo gravado, protocolo preservado, claim liberado.
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.terminalEfetivada("PRT-1");
+        FakeEntregaComClaim entrega = new FakeEntregaComClaim(true);
+
+        ResultadoConclusaoDefinitiva resultado = usecase(fake, entrega).executarSobClaim(
+                claimDeTeste(), new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.CONTA_INEXISTENTE),
+                AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho.class);
+        ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho concluida = (ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho) resultado;
+        assertThat(concluida.terminalObservado()).isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVADA);
+        assertThat(concluida.contraditoria()).isTrue();
+        assertThat(fake.status).isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVADA);
+        assertThat(fake.motivoFalha).isNull();
+        assertThat(fake.protocoloCore).isEqualTo("PRT-1");
+        assertThat(entrega.terminalizacoesFalhaDefinitiva).isZero();
+        assertThat(entrega.terminalizacoesConcorrentes).isEqualTo(1);
+        assertThat(entrega.ultimoTerminalConcorrente).isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVADA);
     }
 
     @Test
-    void executarSobClaim_conclusaoNaoAconteceuAgora_lancaInvarianteDoTicket() {
-        // Claim valido mas solicitacao JA terminal: em #0004 isso e invariante quebrada (nenhum
-        // outro caminho conclui antes do dispatcher) -- falha alto, e a transacao desfaz tudo.
-        FakeResultadoEfetivacaoPort fake = new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.REJEITADA);
+    void executarSobClaim_callbackJaConcluiuFalhaComMesmoMotivo_naoContraditoriaMasAindaTerminalizaComoFalhaDefinitiva() {
+        // (b) inverso: FALHA_EFETIVACAO ja persistida com o MESMO motivo que o dispatcher traria
+        // -- concorrencia sem contradicao. Entrega ainda termina FALHA_DEFINITIVA (terminal
+        // observado dita a entrega, nao o resultado perdedor).
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.terminalFalha(
+                MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE, null);
         FakeEntregaComClaim entrega = new FakeEntregaComClaim(true);
-        RegistrarResultadoEfetivacao usecase = usecase(fake, entrega);
 
-        assertThatThrownBy(() -> usecase.executarSobClaim(
-                claimDeTeste(), new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.CONTA_INEXISTENTE),
-                AUTOR, AGORA))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("invariante do #0004");
+        ResultadoConclusaoDefinitiva resultado = usecase(fake, entrega).executarSobClaim(
+                claimDeTeste(), new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE),
+                AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho.class);
+        ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho concluida = (ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho) resultado;
+        assertThat(concluida.terminalObservado()).isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
+        assertThat(concluida.contraditoria()).isFalse();
+        assertThat(fake.status).isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
+        assertThat(fake.motivoFalha).isEqualTo(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE);
+        assertThat(entrega.terminalizacoesFalhaDefinitiva).isZero();
+        assertThat(entrega.terminalizacoesConcorrentes).isEqualTo(1);
+        assertThat(entrega.ultimoTerminalConcorrente).isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
+    }
+
+    @Test
+    void executarSobClaim_callbackJaConcluiuFalhaComMotivoDiferente_contraditoriaMasTerminalizaComoFalhaDefinitiva() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.terminalFalha(
+                MotivoFalhaEfetivacao.CONTA_BLOQUEADA_NA_EFETIVACAO, null);
+        FakeEntregaComClaim entrega = new FakeEntregaComClaim(true);
+
+        ResultadoConclusaoDefinitiva resultado = usecase(fake, entrega).executarSobClaim(
+                claimDeTeste(), new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE),
+                AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho.class);
+        assertThat(((ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho) resultado).contraditoria()).isTrue();
+        assertThat(fake.motivoFalha).isEqualTo(MotivoFalhaEfetivacao.CONTA_BLOQUEADA_NA_EFETIVACAO);
+        assertThat(entrega.terminalizacoesConcorrentes).isEqualTo(1);
+        assertThat(entrega.ultimoTerminalConcorrente).isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
     }
 
     /**
      * Fake comportamental de uma unica SolicitacaoAumentoLimite, chaveada por EfetivacaoId, que
-     * delega a decisao de transicao ao dominio real -- exatamente a mesma logica "ja terminal? nao
-     * reescreve" que {@code JpaResultadoEfetivacaoAdapter} implementa contra PostgreSQL (S3).
+     * delega a decisao de transicao ao dominio real e reproduz a MESMA classificacao terminal em
+     * tres eixos (protocolo, resultado/motivo, limite efetivado) que
+     * {@code JpaResultadoEfetivacaoAdapter} implementa contra PostgreSQL (S3).
      */
     private static final class FakeResultadoEfetivacaoPort implements ResultadoEfetivacaoPort {
         private static final Instant DECIDIDA_EM = AGORA.minus(Duration.ofMinutes(5));
 
-        private final Map<EfetivacaoId, StatusSolicitacaoAumentoLimite> estados = new HashMap<>();
+        StatusSolicitacaoAumentoLimite status;
+        String protocoloCore;
+        MotivoFalhaEfetivacao motivoFalha;
         int chamadasDeRegistro = 0;
 
-        FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite estadoInicial) {
-            estados.put(EFETIVACAO_ID, estadoInicial);
+        private FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite status, String protocoloCore, MotivoFalhaEfetivacao motivoFalha) {
+            this.status = status;
+            this.protocoloCore = protocoloCore;
+            this.motivoFalha = motivoFalha;
+        }
+
+        static FakeResultadoEfetivacaoPort naoTerminal(StatusSolicitacaoAumentoLimite status) {
+            return new FakeResultadoEfetivacaoPort(status, null, null);
+        }
+
+        static FakeResultadoEfetivacaoPort terminalEfetivada(String protocoloCore) {
+            return new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.EFETIVADA, protocoloCore, null);
+        }
+
+        static FakeResultadoEfetivacaoPort terminalFalha(MotivoFalhaEfetivacao motivo, String protocoloCore) {
+            return new FakeResultadoEfetivacaoPort(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO, protocoloCore, motivo);
         }
 
         @Override
         public ResultadoRegistroEfetivacao registrar(
-                EfetivacaoId efetivacaoId, ResultadoEfetivacaoRecebido resultado, AtorOperacao autor, Instant agora) {
+                EfetivacaoId efetivacaoId, ResultadoEfetivacaoRecebido resultado, Optional<ProtocoloCore> protocoloInformado,
+                AtorOperacao autor, Instant agora) {
             chamadasDeRegistro++;
-            StatusSolicitacaoAumentoLimite atual = estados.get(efetivacaoId);
-            SolicitacaoAumentoLimite solicitacao = new SolicitacaoAumentoLimite(atual);
 
-            if (atual.isTerminal()) {
-                return new ResultadoRegistroEfetivacao(false, atual, null);
+            boolean protocoloCoerente = protocoloCore == null || protocoloInformado.isEmpty()
+                    || protocoloCore.equals(protocoloInformado.get().valor());
+
+            if (status.isTerminal()) {
+                boolean resultadoCoerente = switch (resultado) {
+                    case ResultadoEfetivacaoRecebido.FalhaDefinitiva falha ->
+                            status == StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO && falha.motivo() == motivoFalha;
+                    case ResultadoEfetivacaoRecebido.Sucesso sucesso ->
+                            status == StatusSolicitacaoAumentoLimite.EFETIVADA
+                                    && sucesso.limiteEfetivadoCentavos() == LIMITE_SOLICITADO_CONGELADO;
+                };
+                return protocoloCoerente && resultadoCoerente
+                        ? new ResultadoRegistroEfetivacao.JaTerminalIdentica(status)
+                        : new ResultadoRegistroEfetivacao.JaTerminalContraditoria(status);
             }
 
-            SolicitacaoAumentoLimite transicionada = solicitacao.transicionarPara(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
-            estados.put(efetivacaoId, transicionada.status());
-            return new ResultadoRegistroEfetivacao(true, transicionada.status(), Duration.between(DECIDIDA_EM, agora));
+            if (!protocoloCoerente) {
+                return new ResultadoRegistroEfetivacao.ProtocoloDivergente();
+            }
+
+            if (resultado instanceof ResultadoEfetivacaoRecebido.Sucesso sucesso
+                    && sucesso.limiteEfetivadoCentavos() != LIMITE_SOLICITADO_CONGELADO) {
+                return new ResultadoRegistroEfetivacao.SucessoIncoerente();
+            }
+
+            if (protocoloInformado.isPresent() && protocoloCore == null) {
+                protocoloCore = protocoloInformado.get().valor();
+            }
+
+            SolicitacaoAumentoLimite solicitacao = new SolicitacaoAumentoLimite(status);
+            StatusSolicitacaoAumentoLimite statusResultante = switch (resultado) {
+                case ResultadoEfetivacaoRecebido.FalhaDefinitiva falha -> {
+                    motivoFalha = falha.motivo();
+                    yield solicitacao.transicionarPara(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO).status();
+                }
+                case ResultadoEfetivacaoRecebido.Sucesso ignored ->
+                        solicitacao.transicionarPara(StatusSolicitacaoAumentoLimite.EFETIVADA).status();
+            };
+            status = statusResultante;
+
+            return new ResultadoRegistroEfetivacao.Concluida(statusResultante, Duration.between(DECIDIDA_EM, agora));
         }
     }
 
     /**
      * Fake minimo de {@link EntregasEfetivacaoPort} para a composicao de {@code executarSobClaim}:
-     * so as duas operacoes de claim importam aqui -- o resto e {@code UnsupportedOperation}, pois
+     * so as tres operacoes de claim importam aqui -- o resto e {@code UnsupportedOperation}, pois
      * este teste nunca reclama nem reagenda (isso e materia de {@code EntregarInstrucoesEfetivacaoTest}).
      */
     private static final class FakeEntregaComClaim implements EntregasEfetivacaoPort {
         private final boolean claimValido;
-        int terminalizacoes = 0;
+        int terminalizacoesFalhaDefinitiva = 0;
+        int terminalizacoesConcorrentes = 0;
+        StatusSolicitacaoAumentoLimite ultimoTerminalConcorrente;
 
         FakeEntregaComClaim(boolean claimValido) {
             this.claimValido = claimValido;
@@ -214,7 +405,14 @@ class RegistrarResultadoEfetivacaoTest {
 
         @Override
         public void terminalizarPorFalhaDefinitiva(EntregaEfetivacaoReclamada claim, Instant agora) {
-            terminalizacoes++;
+            terminalizacoesFalhaDefinitiva++;
+        }
+
+        @Override
+        public void terminalizarPorConclusaoConcorrente(
+                EntregaEfetivacaoReclamada claim, StatusSolicitacaoAumentoLimite terminalObservado, Instant agora) {
+            terminalizacoesConcorrentes++;
+            ultimoTerminalConcorrente = terminalObservado;
         }
 
         @Override
