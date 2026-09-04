@@ -7,9 +7,13 @@ import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.InstrucaoEfetivacaoCorePort;
 import com.fkmanager360.credito.application.port.out.IntencaoEfetivacao;
 import com.fkmanager360.credito.application.port.out.ReclamacaoEntrega;
-import com.fkmanager360.credito.application.port.out.ResultadoConclusaoDefinitiva;
+import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
+import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
 import com.fkmanager360.credito.application.port.out.ResultadoInstrucaoCore;
+import com.fkmanager360.credito.application.port.out.ResultadoRegistroEfetivacao;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEntrega;
+import com.fkmanager360.credito.application.port.out.TransacaoPort;
+import com.fkmanager360.credito.domain.AtorOperacao;
 import com.fkmanager360.credito.domain.ContaId;
 import com.fkmanager360.credito.domain.CorrelationId;
 import com.fkmanager360.credito.domain.EfetivacaoId;
@@ -18,6 +22,7 @@ import com.fkmanager360.credito.domain.LimiteSolicitado;
 import com.fkmanager360.credito.domain.MotivoFalhaEfetivacao;
 import com.fkmanager360.credito.domain.ProtocoloCore;
 import com.fkmanager360.credito.domain.SolicitacaoId;
+import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -31,6 +36,7 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -168,11 +174,24 @@ class EntregarInstrucoesEfetivacaoTest {
         }
     }
 
+    /** {@code TransacaoPort} de teste: executa a unidade diretamente (S2 nao prova atomicidade). */
+    private static final TransacaoPort TRANSACAO_PASSA_DIRETO = new TransacaoPort() {
+        @Override
+        public <T> T executar(Supplier<T> unidade) {
+            return unidade.get();
+        }
+    };
+
     private static EntregarInstrucoesEfetivacao criarDispatcher(
-            EntregasEfetivacaoPort entregas, InstrucaoEfetivacaoCorePort core, Clock relogio) {
+            FakeEntregasEfetivacaoPort entregas, InstrucaoEfetivacaoCorePort core, Clock relogio) {
         PoliticaRetryEntrega politicaRetry = new PoliticaRetryEntrega(
                 Duration.ofSeconds(1), Duration.ofSeconds(4), 0.0, new Random(42));
-        return new EntregarInstrucoesEfetivacao(entregas, core, politicaRetry, relogio, MAX_TENTATIVAS, LEASE);
+        // Caso de uso de conclusao REAL sobre o mesmo fake (que implementa as duas portas sobre a
+        // mesma linha em memoria, espelhando producao: um banco, duas portas).
+        RegistrarResultadoEfetivacao registrarResultado =
+                new RegistrarResultadoEfetivacao(entregas, entregas, TRANSACAO_PASSA_DIRETO);
+        return new EntregarInstrucoesEfetivacao(
+                entregas, core, politicaRetry, registrarResultado, relogio, MAX_TENTATIVAS, LEASE);
     }
 
     /**
@@ -230,8 +249,12 @@ class EntregarInstrucoesEfetivacaoTest {
      * uma segunda reclamacao concorrente ter invalidado o claim entre a reclamacao desta chamada e
      * a escrita do resultado -- o cenario adversarial de verdade (duas transacoes reais) e provado
      * em S3.
+     *
+     * <p>Implementa TAMBEM {@link ResultadoEfetivacaoPort} sobre a mesma linha: em producao as
+     * duas portas escrevem no mesmo banco, e a composicao de {@code executarSobClaim} atravessa as
+     * duas -- um unico fake espelha isso sem sincronizacao artificial.
      */
-    private static final class FakeEntregasEfetivacaoPort implements EntregasEfetivacaoPort {
+    private static final class FakeEntregasEfetivacaoPort implements EntregasEfetivacaoPort, ResultadoEfetivacaoPort {
         private final IntencaoEfetivacao intencao;
         private final SolicitacaoId solicitacaoId = new SolicitacaoId(UUID.randomUUID());
         String status;
@@ -312,14 +335,24 @@ class EntregarInstrucoesEfetivacaoTest {
         }
 
         @Override
-        public ResultadoConclusaoDefinitiva concluirComFalhaDefinitiva(EntregaEfetivacaoReclamada claim, MotivoFalhaEfetivacao motivo, Instant agora) {
-            if (!fencingValido(claim)) {
-                return new ResultadoConclusaoDefinitiva.DescartadoClaimObsoleto();
-            }
+        public boolean claimAindaValido(EntregaEfetivacaoReclamada claim) {
+            return fencingValido(claim);
+        }
+
+        @Override
+        public void terminalizarPorFalhaDefinitiva(EntregaEfetivacaoReclamada claim, Instant agora) {
             status = "FALHA_DEFINITIVA";
-            motivoFalhaConcluido = motivo;
             claimAtual = null;
-            return new ResultadoConclusaoDefinitiva.Aplicado(Duration.ofMinutes(5));
+        }
+
+        @Override
+        public ResultadoRegistroEfetivacao registrar(
+                EfetivacaoId efetivacaoId, ResultadoEfetivacaoRecebido resultado, AtorOperacao autor, Instant agora) {
+            if (resultado instanceof ResultadoEfetivacaoRecebido.FalhaDefinitiva falhaDefinitiva) {
+                motivoFalhaConcluido = falhaDefinitiva.motivo();
+            }
+            return new ResultadoRegistroEfetivacao(
+                    true, StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO, Duration.ofMinutes(5));
         }
 
         private boolean fencingValido(EntregaEfetivacaoReclamada claim) {

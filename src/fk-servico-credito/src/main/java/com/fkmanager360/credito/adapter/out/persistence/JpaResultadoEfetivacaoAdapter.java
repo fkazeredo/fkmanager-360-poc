@@ -28,9 +28,9 @@ import java.time.Instant;
  * de decidir se ha algo a escrever), e usa o MESMO {@link SolicitacaoAumentoLimite} de dominio ja
  * exaustivamente testado em S1 desde #0003 -- nenhuma segunda tabela de transicoes.
  *
- * <p>Chamada tanto de dentro da transacao ja aberta por
- * {@code JdbcEntregasEfetivacaoAdapter#concluirComFalhaDefinitiva} (#0004, via propagacao
- * {@code REQUIRED} padrao) quanto, no futuro, standalone pelo callback (#0005) e pela
+ * <p>Chamada tanto de dentro da unidade transacional aberta pela {@code TransacaoPort} na
+ * composicao fenced de {@code RegistrarResultadoEfetivacao#executarSobClaim} (#0004, via
+ * propagacao {@code REQUIRED} padrao) quanto, no futuro, standalone pelo callback (#0005) e pela
  * reconciliacao (#0006) -- nenhuma delas duplica esta porta.
  */
 @Repository

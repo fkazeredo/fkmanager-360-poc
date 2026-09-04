@@ -7,24 +7,19 @@ import com.fkmanager360.credito.application.port.out.EntregaEfetivacaoReclamada;
 import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.IntencaoEfetivacao;
 import com.fkmanager360.credito.application.port.out.ReclamacaoEntrega;
-import com.fkmanager360.credito.application.port.out.ResultadoConclusaoDefinitiva;
-import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
-import com.fkmanager360.credito.application.port.out.ResultadoRegistroEfetivacao;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEntrega;
-import com.fkmanager360.credito.application.usecase.RegistrarResultadoEfetivacao;
-import com.fkmanager360.credito.domain.AtorSistema;
 import com.fkmanager360.credito.domain.ContaId;
 import com.fkmanager360.credito.domain.CorrelationId;
 import com.fkmanager360.credito.domain.EfetivacaoId;
 import com.fkmanager360.credito.domain.LimiteChequeEspecialVigente;
 import com.fkmanager360.credito.domain.LimiteSolicitado;
-import com.fkmanager360.credito.domain.MotivoFalhaEfetivacao;
 import com.fkmanager360.credito.domain.ProtocoloCore;
 import com.fkmanager360.credito.domain.SolicitacaoId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
@@ -48,13 +43,17 @@ import java.util.UUID;
  * chamada. O loop de "ate {@code lote} episodios por tick" vive no adapter de agendamento.
  *
  * <p><b>Fencing (correcao do Owner sobre OD-1):</b> toda escrita de resultado
- * ({@link #registrarAceite}, {@link #reagendar}, {@link #marcarIndeterminada},
- * {@link #concluirComFalhaDefinitiva}) comeca por {@link #fencingValido}, que adquire um lock
- * FRESCO sobre a linha (TX-A ja liberou o seu antes do HTTP) e so prossegue se o {@code claimId}
- * apresentado ainda for o corrente e o {@code status_entrega} ainda for {@code PENDENTE}. Claim
- * obsoleto e descartado ANTES de qualquer outra leitura ou escrita -- nem {@code outbox_entrega},
- * nem {@code solicitacao_aumento_limite}, nem historico, nem retorno que permita metrica de
- * resultado.
+ * ({@link #registrarAceite}, {@link #reagendar}, {@link #marcarIndeterminada}) comeca por
+ * {@link #fencingValido}, que adquire um lock FRESCO sobre a linha (TX-A ja liberou o seu antes do
+ * HTTP) e so prossegue se o {@code claimId} apresentado ainda for o corrente e o
+ * {@code status_entrega} ainda for {@code PENDENTE}. Claim obsoleto e descartado ANTES de qualquer
+ * outra leitura ou escrita -- nem {@code outbox_entrega}, nem {@code solicitacao_aumento_limite},
+ * nem historico, nem retorno que permita metrica de resultado.
+ *
+ * <p><b>Conclusao definitiva nao mora aqui</b> (revisao do Owner, 2026-09-04): quem a orquestra e
+ * {@code RegistrarResultadoEfetivacao}, dentro de uma {@code TransacaoPort}; este adapter
+ * contribui as operacoes {@code MANDATORY} {@link #claimAindaValido} e
+ * {@link #terminalizarPorFalhaDefinitiva} para essa composicao, e nunca chama a aplicacao.
  */
 @Repository
 @RequiredArgsConstructor
@@ -64,7 +63,6 @@ public class JdbcEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
     private final JdbcClient jdbcClient;
     private final SolicitacaoAumentoLimiteRepository solicitacaoRepository;
     private final HistoricoSolicitacaoRepository historicoRepository;
-    private final RegistrarResultadoEfetivacao registrarResultadoEfetivacao;
 
     @Override
     @Transactional
@@ -215,37 +213,22 @@ public class JdbcEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
         return ResultadoRegistroEntrega.APLICADO;
     }
 
+    /**
+     * {@code MANDATORY}: exige a transacao aberta pela {@code TransacaoPort} da composicao de
+     * conclusao -- fora dela o {@code FOR UPDATE} evaporaria no autocommit e o fencing seria
+     * ilusorio. Falha rapida em vez de mentir.
+     */
     @Override
-    @Transactional
-    public ResultadoConclusaoDefinitiva concluirComFalhaDefinitiva(
-            EntregaEfetivacaoReclamada claim, MotivoFalhaEfetivacao motivo, Instant agora) {
-        if (!fencingValido(claim)) {
-            return new ResultadoConclusaoDefinitiva.DescartadoClaimObsoleto();
-        }
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean claimAindaValido(EntregaEfetivacaoReclamada claim) {
+        return fencingValido(claim);
+    }
 
-        // Mesma transacao (REQUIRED, propagacao padrao do Spring): passa pelo caso de uso UNICO de
-        // conclusao (ADR-0009; RegistrarResultadoEfetivacao), nunca direto no port -- #0005/#0006
-        // acrescentam outras entradas para o MESMO caso de uso, nunca uma segunda implementacao.
-        ResultadoRegistroEfetivacao conclusao = registrarResultadoEfetivacao.executar(
-                claim.intencao().efetivacaoId(), new ResultadoEfetivacaoRecebido.FalhaDefinitiva(motivo),
-                AtorSistema.CORE_LEGADO, agora);
-
+    /** Mesma exigencia de transacao ativa de {@link #claimAindaValido} -- mesma composicao. */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void terminalizarPorFalhaDefinitiva(EntregaEfetivacaoReclamada claim, Instant agora) {
         terminalizar(claim.intencao().messageId(), StatusEntrega.FALHA_DEFINITIVA, ClasseResultado.DEFINITIVO, null, agora);
-
-        // conclusao.concluiuAgora() e SEMPRE true aqui em #0004: o fencing acima garante que so um
-        // worker chega neste ponto por entrega, e nenhum outro caminho deste ticket alcanca
-        // AGUARDANDO_EFETIVACAO antes do dispatcher. Deixa de ser verdade quando #0005 (callback) ou
-        // #0006 (reconciliacao) passarem a tambem invocar RegistrarResultadoEfetivacao para o mesmo
-        // EfetivacaoId -- a essa altura, este guard precisa virar uma variante propria de
-        // ResultadoConclusaoDefinitiva (ex.: "ja concluida por outro caminho"), nao permanecer um
-        // require implicito. Falhar alto agora, em vez de aceitar silenciosamente, e deliberado.
-        if (!conclusao.concluiuAgora()) {
-            throw new IllegalStateException(
-                    "concluirComFalhaDefinitiva: RegistrarResultadoEfetivacao nao concluiu agora para "
-                            + "efetivacaoId=" + claim.intencao().efetivacaoId()
-                            + " -- invariante do #0004 quebrada (ver Javadoc do metodo)");
-        }
-        return new ResultadoConclusaoDefinitiva.Aplicado(conclusao.permanenciaEmAguardandoEfetivacao());
     }
 
     /**

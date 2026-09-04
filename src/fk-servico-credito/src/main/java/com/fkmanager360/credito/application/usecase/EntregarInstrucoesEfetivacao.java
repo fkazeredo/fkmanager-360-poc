@@ -7,8 +7,10 @@ import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.InstrucaoEfetivacaoCorePort;
 import com.fkmanager360.credito.application.port.out.ReclamacaoEntrega;
 import com.fkmanager360.credito.application.port.out.ResultadoConclusaoDefinitiva;
+import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
 import com.fkmanager360.credito.application.port.out.ResultadoInstrucaoCore;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEntrega;
+import com.fkmanager360.credito.domain.AtorSistema;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -25,10 +27,11 @@ import java.util.Objects;
  *
  * <p>As quatro classes de {@link ResultadoInstrucaoCore} sao tratadas exaustivamente por
  * {@code sealed}+{@code switch}: o compilador falha se uma nova classe for introduzida sem que
- * este caso de uso decida o que fazer com ela. O fencing e resolvido inteiramente dentro de
- * {@link EntregasEfetivacaoPort} -- este caso de uso so reage a
- * {@link ResultadoRegistroEntrega#DESCARTADO_CLAIM_OBSOLETO} devolvendo
- * {@link ResultadoEpisodioEntrega.DescartadaPorFencing}, sem tentar reinterpretar a decisao.
+ * este caso de uso decida o que fazer com ela. Nos desfechos de entrega (aceite, transitorio,
+ * indeterminado) o fencing e resolvido inteiramente dentro de {@link EntregasEfetivacaoPort}; no
+ * desfecho definitivo, a composicao fenced pertence a {@code RegistrarResultadoEfetivacao}
+ * (caso de uso unico de conclusao, ADR-0009). Em ambos, este caso de uso so reage ao descarte
+ * devolvendo {@link ResultadoEpisodioEntrega.DescartadaPorFencing}, sem reinterpretar a decisao.
  *
  * <p><b>Dois instantes, nao um.</b> O {@link Clock} e consultado antes do claim E de novo depois
  * do retorno do Core: a chamada HTTP pode levar segundos (timeout de leitura configurado em
@@ -42,6 +45,7 @@ public class EntregarInstrucoesEfetivacao {
     private final EntregasEfetivacaoPort entregas;
     private final InstrucaoEfetivacaoCorePort core;
     private final PoliticaRetryEntrega politicaRetry;
+    private final RegistrarResultadoEfetivacao registrarResultadoEfetivacao;
     private final Clock clock;
     private final int maxTentativas;
     private final Duration lease;
@@ -50,12 +54,15 @@ public class EntregarInstrucoesEfetivacao {
             EntregasEfetivacaoPort entregas,
             InstrucaoEfetivacaoCorePort core,
             PoliticaRetryEntrega politicaRetry,
+            RegistrarResultadoEfetivacao registrarResultadoEfetivacao,
             Clock clock,
             int maxTentativas,
             Duration lease) {
         this.entregas = Objects.requireNonNull(entregas, "entregas e obrigatorio");
         this.core = Objects.requireNonNull(core, "core e obrigatorio");
         this.politicaRetry = Objects.requireNonNull(politicaRetry, "politicaRetry e obrigatoria");
+        this.registrarResultadoEfetivacao =
+                Objects.requireNonNull(registrarResultadoEfetivacao, "registrarResultadoEfetivacao e obrigatorio");
         this.clock = Objects.requireNonNull(clock, "clock e obrigatorio");
         if (maxTentativas < 1) {
             throw new IllegalArgumentException("maxTentativas deve ser >= 1: " + maxTentativas);
@@ -108,7 +115,11 @@ public class EntregarInstrucoesEfetivacao {
 
     private ResultadoEpisodioEntrega aplicarDefinitiva(
             EntregaEfetivacaoReclamada claim, ResultadoInstrucaoCore.FalhaDefinitiva definitiva, Instant agora) {
-        ResultadoConclusaoDefinitiva r = entregas.concluirComFalhaDefinitiva(claim, definitiva.motivo(), agora);
+        // Unico desfecho que conclui a solicitacao -- por isso converge no caso de uso UNICO de
+        // conclusao (ADR-0009), que compoe fencing + conclusao + terminalizacao atomicamente.
+        ResultadoConclusaoDefinitiva r = registrarResultadoEfetivacao.executarSobClaim(
+                claim, new ResultadoEfetivacaoRecebido.FalhaDefinitiva(definitiva.motivo()),
+                AtorSistema.CORE_LEGADO, agora);
         return switch (r) {
             case ResultadoConclusaoDefinitiva.Aplicado aplicado ->
                     new ResultadoEpisodioEntrega.FalhaDefinitiva(definitiva.motivo(), aplicado.permanenciaEmAguardandoEfetivacao());

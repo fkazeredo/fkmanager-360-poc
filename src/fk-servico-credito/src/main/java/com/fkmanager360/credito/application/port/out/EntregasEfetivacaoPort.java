@@ -1,6 +1,5 @@
 package com.fkmanager360.credito.application.port.out;
 
-import com.fkmanager360.credito.domain.MotivoFalhaEfetivacao;
 import com.fkmanager360.credito.domain.ProtocoloCore;
 
 import java.time.Duration;
@@ -15,6 +14,12 @@ import java.time.Instant;
  * <p><b>Claim unitario (decisao do Owner, OD-1):</b> {@link #reclamarProxima} reclama NO MAXIMO uma
  * entrega por chamada -- nunca uma colecao. O "lote" de {@code credito.efetivacao.entrega.lote}
  * pertence ao loop de episodios por tick na camada de agendamento, nao a esta porta.
+ *
+ * <p><b>Conclusao definitiva nao mora aqui</b> (revisao do Owner, 2026-09-04): o desfecho que
+ * conclui a solicitacao e orquestrado por {@code RegistrarResultadoEfetivacao} dentro de uma
+ * {@link TransacaoPort}, compondo {@link #claimAindaValido} + {@link ResultadoEfetivacaoPort} +
+ * {@link #terminalizarPorFalhaDefinitiva} -- esta porta contribui as duas operacoes de claim, mas
+ * a regra de composicao e da aplicacao.
  */
 public interface EntregasEfetivacaoPort {
 
@@ -42,13 +47,19 @@ public interface EntregasEfetivacaoPort {
     ResultadoRegistroEntrega marcarIndeterminada(EntregaEfetivacaoReclamada claim, String erroSanitizado, Instant agora);
 
     /**
-     * TX-B (definitivo): conclui a solicitacao via {@code ResultadoEfetivacaoPort} (a MESMA porta
-     * usada por callback/reconciliacao em #0005/#0006, chamada dentro da mesma transacao) e fecha
-     * a entrega como {@code FALHA_DEFINITIVA} -- atomico com a checagem de fencing. Retorno
-     * dedicado ({@link ResultadoConclusaoDefinitiva}, nao o {@link ResultadoRegistroEntrega}
-     * generico): e o unico desfecho que conclui a solicitacao, e por isso o unico que carrega a
-     * permanencia em AGUARDANDO_EFETIVACAO (AC36).
+     * Fencing sob lock fresco ({@code SELECT ... FOR UPDATE}): true somente se a entrega ainda
+     * esta {@code PENDENTE} e o {@code claimId} apresentado ainda e o corrente. O lock adquirido
+     * persiste ate o fim da transacao corrente -- e ele que serializa dois workers disputando o
+     * mesmo desfecho. <b>So pode ser chamado dentro de uma {@link TransacaoPort} ativa</b>
+     * (propagacao {@code MANDATORY} no adapter): fora dela o lock evaporaria no autocommit e o
+     * fencing seria ilusorio.
      */
-    ResultadoConclusaoDefinitiva concluirComFalhaDefinitiva(
-            EntregaEfetivacaoReclamada claim, MotivoFalhaEfetivacao motivo, Instant agora);
+    boolean claimAindaValido(EntregaEfetivacaoReclamada claim);
+
+    /**
+     * Fecha a entrega como {@code FALHA_DEFINITIVA} (classe {@code DEFINITIVO}), zerando claim e
+     * agenda. Mesma exigencia de transacao ativa de {@link #claimAindaValido} -- e chamada depois
+     * dele, na mesma unidade, pela composicao de {@code RegistrarResultadoEfetivacao}.
+     */
+    void terminalizarPorFalhaDefinitiva(EntregaEfetivacaoReclamada claim, Instant agora);
 }

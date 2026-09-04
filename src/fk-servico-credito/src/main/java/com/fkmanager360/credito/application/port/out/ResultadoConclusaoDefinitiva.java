@@ -4,11 +4,11 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * Resultado de {@link EntregasEfetivacaoPort#concluirComFalhaDefinitiva}, distinto do
- * {@link ResultadoRegistroEntrega} generico usado pelos outros tres desfechos: e o UNICO caminho
- * de entrega que conclui a solicitacao, e por isso e o unico que carrega a permanencia em
- * AGUARDANDO_EFETIVACAO (AC36) -- forcar esse campo dentro do enum compartilhado obrigaria os
- * outros tres desfechos a carregar um valor que nunca usam.
+ * Resultado da conclusao definitiva sob claim ({@code RegistrarResultadoEfetivacao#executarSobClaim}),
+ * distinto do {@link ResultadoRegistroEntrega} generico usado pelos outros tres desfechos de
+ * entrega: e o UNICO caminho que conclui a solicitacao, e por isso o unico que carrega a
+ * permanencia em AGUARDANDO_EFETIVACAO (AC36) -- forcar esse campo dentro do enum compartilhado
+ * obrigaria os outros tres desfechos a carregar um valor que nunca usam.
  */
 public sealed interface ResultadoConclusaoDefinitiva {
 

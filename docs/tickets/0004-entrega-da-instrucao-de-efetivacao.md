@@ -180,3 +180,34 @@ jornada nova (fora de escopo deste ticket). 4 contratos OpenAPI válidos
 (reconciliação, `EFETIVACAO_INDETERMINADA`, consulta de status) não foram implementados.
 
 **Ticket fechado.**
+
+### 2026-09-04 — franklin.azeredo
+
+Refactoring estrutural pós-fechamento, decidido pelo Owner após a revisão de três eixos do projeto:
+eliminado o ciclo runtime adapter→caso de uso na conclusão por falha definitiva. A composição
+fenced (verificação de claim + conclusão + terminalização da entrega, num único commit) saiu de
+dentro de `JdbcEntregasEfetivacaoAdapter.concluirComFalhaDefinitiva` e passou a ser orquestrada
+pela aplicação: `EntregarInstrucoesEfetivacao` → `RegistrarResultadoEfetivacao.executarSobClaim`
+→ nova `TransacaoPort` (unidade de trabalho; adapter declarativo em `adapter.out.persistence`,
+único pacote autorizado pelo ArchUnit a depender de spring-tx) envolvendo `claimAindaValido` e
+`terminalizarPorFalhaDefinitiva` (novas operações `MANDATORY` de `EntregasEfetivacaoPort`) e o
+`ResultadoEfetivacaoPort.registrar` de sempre. Nenhum adapter chama mais a aplicação; ADR-0009
+("caso de uso único de conclusão") sai reforçada — o dispatcher agora passa literalmente pelo caso
+de uso na camada de aplicação. `TransacaoPort` documenta que NÃO é convite a transação genérica na
+aplicação (ADR-0010): o idioma "um método de porta = uma transação" continua o padrão.
+
+Semântica preservada byte a byte: mesma ordem global de locks (`outbox_entrega` →
+`solicitacao_aumento_limite`, verificada em todos os escritores — **constraint para #0006**: um
+reconciliador que terminalize `outbox_entrega` deve tomar o lock dela ANTES do lock da
+solicitação), mesmo guard de `concluiuAgora` (agora no caso de uso, com rollback pela exceção),
+mesma cobertura adversarial S3 (testes de fencing trocaram o call-site para `executarSobClaim`).
+S2 do dispatcher passou a montar o `RegistrarResultadoEfetivacao` real sobre um fake que implementa
+as duas portas na mesma linha em memória; `RegistrarResultadoEfetivacaoTest` ganhou os casos de
+`executarSobClaim` (aplica/descarta/guard).
+
+Na mesma leva, no frontend (`fk-app-gerente`): `atendimento.ts` decomposto sem mudança de
+comportamento — `parseReaisParaCentavos`/`formatarReais` para `shared/reais.ts`, mensagens e a
+taxonomia de erro da submissão para `features/atendimento/mensagens.ts`, com a nova
+`acaoParaErroSubmissao` devolvendo ação tipada (união discriminada exaustiva:
+limiteDesatualizado/bloquearFormulario/manterChave) testada pura em `mensagens.spec.ts`; o
+componente só executa efeitos, e o estado da Idempotency-Key permanece nele.

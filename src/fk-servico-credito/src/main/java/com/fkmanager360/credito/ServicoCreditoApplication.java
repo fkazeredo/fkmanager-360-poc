@@ -7,6 +7,7 @@ import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.InstrucaoEfetivacaoCorePort;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
 import com.fkmanager360.credito.application.port.out.SolicitacoesAumentoLimitePort;
+import com.fkmanager360.credito.application.port.out.TransacaoPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.usecase.ConsultarLimiteChequeEspecialVigente;
 import com.fkmanager360.credito.application.usecase.DecidirSolicitacaoAumentoLimite;
@@ -101,28 +102,35 @@ public class ServicoCreditoApplication {
 
     /**
      * O dispatcher de efetivacao (spec, secao "Dispatcher"; plano #0004, secoes 1 e 5): tentativa
-     * inicial mais ate 3 retries ({@code max-tentativas=4}), lease de claim de 30s por default.
+     * inicial mais ate 3 retries ({@code max-tentativas=4}), lease de claim de 30s por default. O
+     * desfecho definitivo converge em {@link RegistrarResultadoEfetivacao} -- o dispatcher nunca
+     * conclui a solicitacao por conta propria.
      */
     @Bean
     EntregarInstrucoesEfetivacao entregarInstrucoesEfetivacao(
             EntregasEfetivacaoPort entregasEfetivacaoPort,
             InstrucaoEfetivacaoCorePort instrucaoEfetivacaoCorePort,
             PoliticaRetryEntrega politicaRetryEntrega,
+            RegistrarResultadoEfetivacao registrarResultadoEfetivacao,
             Clock clock,
             @Value("${credito.efetivacao.entrega.max-tentativas:4}") int maxTentativas,
             @Value("${credito.efetivacao.entrega.lease:PT30S}") Duration lease) {
         return new EntregarInstrucoesEfetivacao(
-                entregasEfetivacaoPort, instrucaoEfetivacaoCorePort, politicaRetryEntrega, clock, maxTentativas, lease);
+                entregasEfetivacaoPort, instrucaoEfetivacaoCorePort, politicaRetryEntrega,
+                registrarResultadoEfetivacao, clock, maxTentativas, lease);
     }
 
     /**
      * Caso de uso UNICO de conclusao da efetivacao (ADR-0009; #0004, Objetivo) -- ver Javadoc de
-     * {@link RegistrarResultadoEfetivacao}. Hoje o unico chamador e
-     * {@code JdbcEntregasEfetivacaoAdapter#concluirComFalhaDefinitiva}; #0005/#0006 acrescentam
-     * outras entradas para o MESMO bean, nunca uma segunda implementacao da regra.
+     * {@link RegistrarResultadoEfetivacao}. A entrada do dispatcher ({@code executarSobClaim})
+     * compoe fencing + conclusao + terminalizacao dentro de {@code TransacaoPort}; #0005/#0006
+     * acrescentam outras entradas para o MESMO bean, nunca uma segunda implementacao da regra.
      */
     @Bean
-    RegistrarResultadoEfetivacao registrarResultadoEfetivacao(ResultadoEfetivacaoPort resultadoEfetivacaoPort) {
-        return new RegistrarResultadoEfetivacao(resultadoEfetivacaoPort);
+    RegistrarResultadoEfetivacao registrarResultadoEfetivacao(
+            ResultadoEfetivacaoPort resultadoEfetivacaoPort,
+            EntregasEfetivacaoPort entregasEfetivacaoPort,
+            TransacaoPort transacaoPort) {
+        return new RegistrarResultadoEfetivacao(resultadoEfetivacaoPort, entregasEfetivacaoPort, transacaoPort);
     }
 }

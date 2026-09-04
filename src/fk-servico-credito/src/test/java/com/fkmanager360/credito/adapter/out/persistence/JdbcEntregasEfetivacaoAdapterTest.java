@@ -5,9 +5,12 @@ import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.ReclamacaoEntrega;
 import com.fkmanager360.credito.application.port.out.ResultadoConclusaoDefinitiva;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
+import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEntrega;
+import com.fkmanager360.credito.application.port.out.TransacaoPort;
 import com.fkmanager360.credito.application.usecase.RegistrarResultadoEfetivacao;
 import com.fkmanager360.credito.adapter.out.persistence.repository.SolicitacaoAumentoLimiteRepository;
+import com.fkmanager360.credito.domain.AtorSistema;
 import com.fkmanager360.credito.domain.ContaId;
 import com.fkmanager360.credito.domain.EfetivacaoId;
 import com.fkmanager360.credito.domain.MotivoFalhaEfetivacao;
@@ -94,6 +97,7 @@ class JdbcEntregasEfetivacaoAdapterTest {
     private static JdbcClient appJdbcClient;
     private static AnnotationConfigApplicationContext applicationContext;
     private static EntregasEfetivacaoPort adapter;
+    private static RegistrarResultadoEfetivacao registrarResultadoEfetivacao;
 
     private static long contaSequencial = 9_200_000_000L;
 
@@ -145,6 +149,7 @@ class JdbcEntregasEfetivacaoAdapterTest {
 
         applicationContext = construirContexto(appDataSource);
         adapter = applicationContext.getBean(EntregasEfetivacaoPort.class);
+        registrarResultadoEfetivacao = applicationContext.getBean(RegistrarResultadoEfetivacao.class);
     }
 
     @AfterAll
@@ -232,11 +237,14 @@ class JdbcEntregasEfetivacaoAdapterTest {
 
         // RegistrarResultadoEfetivacao (application.usecase) fica fora do ComponentScan acima
         // (que so cobre adapter.out.persistence, de proposito -- o caso de uso e Java puro, sem
-        // anotacao Spring alguma). JpaResultadoEfetivacaoAdapter, o ResultadoEfetivacaoPort que ele
-        // envolve, e encontrado pelo ComponentScan normalmente.
+        // anotacao Spring alguma). As tres portas que ele compoe (JpaResultadoEfetivacaoAdapter,
+        // JdbcEntregasEfetivacaoAdapter e TransacaoAdapter) entram pelo ComponentScan normalmente.
         @Bean
-        RegistrarResultadoEfetivacao registrarResultadoEfetivacao(ResultadoEfetivacaoPort resultadoEfetivacaoPort) {
-            return new RegistrarResultadoEfetivacao(resultadoEfetivacaoPort);
+        RegistrarResultadoEfetivacao registrarResultadoEfetivacao(
+                ResultadoEfetivacaoPort resultadoEfetivacaoPort,
+                EntregasEfetivacaoPort entregasEfetivacaoPort,
+                TransacaoPort transacaoPort) {
+            return new RegistrarResultadoEfetivacao(resultadoEfetivacaoPort, entregasEfetivacaoPort, transacaoPort);
         }
 
         @Bean
@@ -369,12 +377,13 @@ class JdbcEntregasEfetivacaoAdapterTest {
     }
 
     @Test
-    void concluirComFalhaDefinitiva_transicionaSolicitacaoParaFalhaEfetivacao_eFechaEntrega() throws SQLException {
+    void conclusaoDefinitivaSobClaim_transicionaSolicitacaoParaFalhaEfetivacao_eFechaEntrega() throws SQLException {
         Fixture fixture = criarSolicitacaoAguardandoEfetivacaoComEntregaPendente(novaContaId(), 500_000, 600_000);
         EntregaEfetivacaoReclamada claim = reclamar(fixture);
 
-        ResultadoConclusaoDefinitiva resultado =
-                adapter.concluirComFalhaDefinitiva(claim, MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE, AGORA);
+        ResultadoConclusaoDefinitiva resultado = registrarResultadoEfetivacao.executarSobClaim(
+                claim, new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE),
+                AtorSistema.CORE_LEGADO, AGORA);
 
         assertThat(resultado).isInstanceOf(ResultadoConclusaoDefinitiva.Aplicado.class);
         assertThat(((ResultadoConclusaoDefinitiva.Aplicado) resultado).permanenciaEmAguardandoEfetivacao()).isNotNull();
@@ -410,7 +419,9 @@ class JdbcEntregasEfetivacaoAdapterTest {
                 .isEqualTo(ResultadoRegistroEntrega.DESCARTADO_CLAIM_OBSOLETO);
         assertThat(adapter.marcarIndeterminada(claimA, "obsoleto", depoisDoLeaseExpirar))
                 .isEqualTo(ResultadoRegistroEntrega.DESCARTADO_CLAIM_OBSOLETO);
-        assertThat(adapter.concluirComFalhaDefinitiva(claimA, MotivoFalhaEfetivacao.CONTA_INEXISTENTE, depoisDoLeaseExpirar))
+        assertThat(registrarResultadoEfetivacao.executarSobClaim(
+                claimA, new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.CONTA_INEXISTENTE),
+                AtorSistema.CORE_LEGADO, depoisDoLeaseExpirar))
                 .isInstanceOf(ResultadoConclusaoDefinitiva.DescartadoClaimObsoleto.class);
 
         assertThat(statusEntregaDe(fixture.messageId())).isEqualTo("ACEITA");

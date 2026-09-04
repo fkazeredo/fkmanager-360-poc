@@ -13,9 +13,9 @@ import java.time.Instant;
  *
  * <p>Usada por #0004 (recusa definitiva ja no aceite) e, sem nenhuma segunda implementacao da
  * regra de conclusao, por #0005 (callback) e #0006 (reconciliacao). Nao conhece
- * {@code outbox_entrega} nem claim de dispatcher -- isso e responsabilidade exclusiva de
- * {@link EntregasEfetivacaoPort}, que a invoca de dentro da mesma transacao quando o resultado
- * chega pela via da entrega (plano #0004, secao 9).
+ * {@code outbox_entrega} nem claim de dispatcher -- quando o resultado chega pela via da entrega,
+ * quem compoe esta porta com o fencing e a terminalizacao (dentro de uma {@link TransacaoPort}
+ * unica) e {@code RegistrarResultadoEfetivacao#executarSobClaim}, nunca esta porta sozinha.
  */
 public interface ResultadoEfetivacaoPort {
 
