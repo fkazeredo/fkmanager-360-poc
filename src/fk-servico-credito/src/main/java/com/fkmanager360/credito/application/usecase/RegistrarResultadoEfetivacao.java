@@ -9,21 +9,30 @@ import com.fkmanager360.credito.application.port.out.ResultadoRegistroEfetivacao
 import com.fkmanager360.credito.application.port.out.TransacaoPort;
 import com.fkmanager360.credito.domain.AtorOperacao;
 import com.fkmanager360.credito.domain.EfetivacaoId;
+import com.fkmanager360.credito.domain.ProtocoloCore;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Caso de uso UNICO de conclusao da efetivacao (ADR-0009; ticket #0004, Objetivo): "uma recusa
  * definitiva ja no aceite precisa concluir a solicitacao. Esse caso de uso e unico: #0005 e #0006
  * acrescentam entradas para ele, nunca uma segunda implementacao da regra de conclusao." A entrada
- * do dispatcher e {@link #executarSobClaim}; #0005 acrescenta o callback (via {@link #executar}),
- * #0006 a reconciliacao -- nenhuma delas duplica {@link ResultadoEfetivacaoPort}.
+ * do dispatcher e {@link #executarSobClaim}; o callback de #0005 entra por {@link #executar};
+ * #0006 (reconciliacao) tambem por {@link #executar} -- nenhuma delas duplica
+ * {@link ResultadoEfetivacaoPort}.
  *
  * <p><b>{@link #executarSobClaim} e a composicao fenced</b> (revisao do Owner, 2026-09-04): dentro
  * de uma unica {@link TransacaoPort}, verifica o claim ({@code SELECT ... FOR UPDATE} no adapter),
  * conclui pela porta de resultado e terminaliza a entrega -- claim obsoleto descarta tudo sem
  * nenhuma escrita. E a aplicacao quem dita essa sequencia; os adapters apenas executam cada passo.
+ *
+ * <p><b>Conclusao concorrente (#0005, guardrail normativo do Owner).</b> Quando o callback ja
+ * terminalizou a solicitacao antes desta chamada sob claim aplicar o resultado do dispatcher, o
+ * terminal PERSISTIDO e autoritativo: o resultado que o dispatcher trazia perde autoridade de
+ * escrita por inteiro, e a entrega termina tecnicamente de acordo com o terminal observado --
+ * nunca com o resultado perdedor. Ver {@link ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho}.
  *
  * <p>Idempotente por construcao: a regra "ja terminal? nao reescreve" vive inteiramente no adapter
  * de persistencia (mesmo padrao de {@code aplicarDecisaoTx2}/TX2, #0003), nao aqui -- este caso de
@@ -42,23 +51,32 @@ public class RegistrarResultadoEfetivacao {
         this.transacao = Objects.requireNonNull(transacao, "transacao e obrigatoria");
     }
 
-    /** Entrada sem claim (resultado autoritativo direto -- callback de #0005, reconciliacao de #0006). */
+    /**
+     * Entrada sem claim (resultado autoritativo direto -- callback de #0005, reconciliacao de
+     * #0006). {@code protocoloInformado} carrega o {@code ProtocoloCore} quando o chamador o
+     * conhece (o callback sempre o traz -- ver Javadoc de {@link ResultadoEfetivacaoPort}).
+     */
     public ResultadoRegistroEfetivacao executar(
-            EfetivacaoId efetivacaoId, ResultadoEfetivacaoRecebido resultado, AtorOperacao autor, Instant agora) {
+            EfetivacaoId efetivacaoId, ResultadoEfetivacaoRecebido resultado, Optional<ProtocoloCore> protocoloInformado,
+            AtorOperacao autor, Instant agora) {
         Objects.requireNonNull(efetivacaoId, "efetivacaoId e obrigatorio");
         Objects.requireNonNull(resultado, "resultado e obrigatorio");
+        Objects.requireNonNull(protocoloInformado, "protocoloInformado e obrigatorio");
         Objects.requireNonNull(autor, "autor e obrigatorio");
         Objects.requireNonNull(agora, "agora e obrigatorio");
-        return resultadoEfetivacao.registrar(efetivacaoId, resultado, autor, agora);
+        return resultadoEfetivacao.registrar(efetivacaoId, resultado, protocoloInformado, autor, agora);
     }
 
     /**
-     * Entrada do dispatcher: conclusao fenced pelo claim, atomica de ponta a ponta. O guard de
-     * {@code concluiuAgora} e invariante do #0004 -- com o fencing valido, nenhum outro caminho
-     * deste ticket alcanca a solicitacao antes; quando #0005/#0006 introduzirem caminhos
-     * concorrentes legitimos, este guard deve virar uma variante propria de
-     * {@link ResultadoConclusaoDefinitiva} (ex.: "ja concluida por outro caminho"), nunca um
-     * aceite silencioso. A excecao desfaz a transacao inteira.
+     * Entrada do dispatcher: conclusao fenced pelo claim, atomica de ponta a ponta -- UMA unica
+     * unidade transacional (nunca duas transacoes sucessivas): lock de {@code outbox_entrega}
+     * (fencing), lock de {@code solicitacao_aumento_limite} (dentro de
+     * {@link ResultadoEfetivacaoPort#registrar}), terminalizacao da entrega e commit unico. Ordem
+     * global de locks preservada em toda a plataforma: {@code outbox_entrega} sempre antes de
+     * {@code solicitacao_aumento_limite} -- o callback puro ({@link #executar}) nunca toma o lock
+     * de {@code outbox_entrega}, entao as duas vias nao podem se dar-lock mutuamente (sem
+     * deadlock). O dispatcher nunca informa {@code ProtocoloCore} nesta via -- aprender protocolo
+     * continua exclusivo de {@code registrarAceite}.
      */
     public ResultadoConclusaoDefinitiva executarSobClaim(
             EntregaEfetivacaoReclamada claim, ResultadoEfetivacaoRecebido resultado, AtorOperacao autor, Instant agora) {
@@ -72,17 +90,29 @@ public class RegistrarResultadoEfetivacao {
                 return new ResultadoConclusaoDefinitiva.DescartadoClaimObsoleto();
             }
 
-            ResultadoRegistroEfetivacao conclusao =
-                    resultadoEfetivacao.registrar(claim.intencao().efetivacaoId(), resultado, autor, agora);
+            ResultadoRegistroEfetivacao conclusao = resultadoEfetivacao.registrar(
+                    claim.intencao().efetivacaoId(), resultado, Optional.empty(), autor, agora);
 
-            entregas.terminalizarPorFalhaDefinitiva(claim, agora);
-
-            if (!conclusao.concluiuAgora()) {
-                throw new IllegalStateException(
-                        "executarSobClaim: conclusao nao aconteceu agora para efetivacaoId="
-                                + claim.intencao().efetivacaoId() + " -- invariante do #0004 quebrada (ver Javadoc)");
-            }
-            return new ResultadoConclusaoDefinitiva.Aplicado(conclusao.permanenciaEmAguardandoEfetivacao());
+            return switch (conclusao) {
+                case ResultadoRegistroEfetivacao.Concluida concluida -> {
+                    entregas.terminalizarPorFalhaDefinitiva(claim, agora);
+                    yield new ResultadoConclusaoDefinitiva.Aplicado(concluida.permanenciaEmAguardandoEfetivacao());
+                }
+                case ResultadoRegistroEfetivacao.JaTerminalIdentica identica -> {
+                    entregas.terminalizarPorConclusaoConcorrente(claim, identica.statusPersistido(), agora);
+                    yield new ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho(identica.statusPersistido(), false);
+                }
+                case ResultadoRegistroEfetivacao.JaTerminalContraditoria contraditoria -> {
+                    entregas.terminalizarPorConclusaoConcorrente(claim, contraditoria.statusPersistido(), agora);
+                    yield new ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho(contraditoria.statusPersistido(), true);
+                }
+                case ResultadoRegistroEfetivacao.SucessoIncoerente ignored -> throw new IllegalStateException(
+                        "executarSobClaim: SucessoIncoerente e inalcancavel aqui -- o dispatcher so registra "
+                                + "FalhaDefinitiva nesta via, nunca Sucesso -- invariante do #0005 quebrada");
+                case ResultadoRegistroEfetivacao.ProtocoloDivergente ignored -> throw new IllegalStateException(
+                        "executarSobClaim: ProtocoloDivergente e inalcancavel aqui -- o dispatcher nunca informa "
+                                + "protocolo nesta via -- invariante do #0005 quebrada");
+            };
         });
     }
 }

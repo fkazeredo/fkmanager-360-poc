@@ -34,6 +34,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -345,14 +346,21 @@ class EntregarInstrucoesEfetivacaoTest {
             claimAtual = null;
         }
 
+        /** Nao usado neste teste: nenhum cenario aqui modela conclusao concorrente (ver {@code RegistrarResultadoEfetivacaoTest}). */
+        @Override
+        public void terminalizarPorConclusaoConcorrente(
+                EntregaEfetivacaoReclamada claim, StatusSolicitacaoAumentoLimite terminalObservado, Instant agora) {
+            throw new UnsupportedOperationException("nao usado neste teste");
+        }
+
         @Override
         public ResultadoRegistroEfetivacao registrar(
-                EfetivacaoId efetivacaoId, ResultadoEfetivacaoRecebido resultado, AtorOperacao autor, Instant agora) {
+                EfetivacaoId efetivacaoId, ResultadoEfetivacaoRecebido resultado, Optional<ProtocoloCore> protocoloInformado,
+                AtorOperacao autor, Instant agora) {
             if (resultado instanceof ResultadoEfetivacaoRecebido.FalhaDefinitiva falhaDefinitiva) {
                 motivoFalhaConcluido = falhaDefinitiva.motivo();
             }
-            return new ResultadoRegistroEfetivacao(
-                    true, StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO, Duration.ofMinutes(5));
+            return new ResultadoRegistroEfetivacao.Concluida(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO, Duration.ofMinutes(5));
         }
 
         private boolean fencingValido(EntregaEfetivacaoReclamada claim) {

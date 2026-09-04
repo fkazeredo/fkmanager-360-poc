@@ -70,6 +70,14 @@ final class JwtTestSupport {
                 List.of("GERENTE_RELACIONAMENTO"), Instant.now().minusSeconds(60));
     }
 
+    /**
+     * Token maquina-a-maquina (#0005, client_credentials do CoreLegado): sem {@code papeis} --
+     * um token de client_credentials nunca carrega papel humano (CONTEXT-MAP.md).
+     */
+    static String machineToken(String subject, String audience, String scope) {
+        return token(subject, audience, scope, List.of(), Instant.now().plusSeconds(300));
+    }
+
     private static String token(String subject, String audience, String scope, List<String> papeis, Instant expiresAt) {
         try {
             JWTClaimsSet claims = new JWTClaimsSet.Builder()

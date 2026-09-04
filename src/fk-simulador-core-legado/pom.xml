@@ -26,7 +26,25 @@
 
     <properties>
         <springdoc.version>3.0.0</springdoc.version>
+        <wiremock.version>3.13.2</wiremock.version>
     </properties>
+
+    <!--
+        Mesmo alinhamento de jetty que fk-servico-credito precisa: wiremock-jetty12 pede
+        jetty-ee10-bom 12.0.30 internamente, mas spring-boot-dependencies ja importa
+        jetty-bom/jetty-ee11-bom 12.1.12, e as duas versoes sao binariamente incompativeis.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.eclipse.jetty.ee10</groupId>
+                <artifactId>jetty-ee10-bom</artifactId>
+                <version>12.1.12</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- OpenAPI gerado a partir das anotacoes dos controllers/DTOs de adapter/in/web (ADR-0019):
@@ -58,6 +76,14 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- #0005: mesmo HTTP client de producao (RestClient) contra um mock HTTP server real,
+             para CallbackDispatcher e TokenClienteCredentials. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-jetty12</artifactId>
+            <version>${wiremock.version}</version>
             <scope>test</scope>
         </dependency>
         <!-- Lombok vive so em adapter/** e config/** (lombok.config na raiz) - domain/** e

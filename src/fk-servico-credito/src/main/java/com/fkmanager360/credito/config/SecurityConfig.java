@@ -58,6 +58,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/clientes/*/contas/*/solicitacoes-aumento-limite")
                                 .access(new WebExpressionAuthorizationManager(
                                         "hasAuthority('SCOPE_credito.escrita') and hasRole('GERENTE_RELACIONAMENTO')"))
+                        // #0005: endpoint maquina-a-maquina (client_credentials, CoreLegado) -- sem
+                        // hasRole, porque um token de client_credentials nao carrega o claim
+                        // "papeis" que so IdentidadeEAcesso emite para sujeitos humanos.
+                        .requestMatchers(HttpMethod.POST, "/callbacks/efetivacoes")
+                                .access(new WebExpressionAuthorizationManager("hasAuthority('SCOPE_credito.callback')"))
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
 

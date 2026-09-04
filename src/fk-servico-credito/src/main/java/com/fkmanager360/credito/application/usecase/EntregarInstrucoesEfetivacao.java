@@ -123,6 +123,12 @@ public class EntregarInstrucoesEfetivacao {
         return switch (r) {
             case ResultadoConclusaoDefinitiva.Aplicado aplicado ->
                     new ResultadoEpisodioEntrega.FalhaDefinitiva(definitiva.motivo(), aplicado.permanenciaEmAguardandoEfetivacao());
+            // #0005: o callback ja concluiu esta solicitacao por outro caminho -- o terminal
+            // persistido venceu, e a falha definitiva que este episodio trazia perde autoridade
+            // de escrita por inteiro (guardrail normativo do Owner).
+            case ResultadoConclusaoDefinitiva.ConcluidaPorOutroCaminho concluidaPorOutroCaminho ->
+                    new ResultadoEpisodioEntrega.ConcluidaPorOutroCaminho(
+                            concluidaPorOutroCaminho.terminalObservado(), concluidaPorOutroCaminho.contraditoria());
             case ResultadoConclusaoDefinitiva.DescartadoClaimObsoleto ignored ->
                     new ResultadoEpisodioEntrega.DescartadaPorFencing();
         };

@@ -23,7 +23,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("fk-servico-credito")
-                        .version("0003")
+                        .version("0005")
                         .description("Resource Server do bounded context Credito, dono semantico do "
                                 + "LimiteChequeEspecial (ADR-0004). Nao devolve dados cadastrais do "
                                 + "Cliente (pertencem a CarteiraClientes) nem a ClassificacaoRiscoCreditoBase "

@@ -248,4 +248,43 @@ class SimuladorCoreLegadoSmokeTest {
 
         assertThat(dados.consultadoEm()).isEqualTo(AGORA);
     }
+
+    // --- Processamento assincrono e consulta-credito reflete o novo vigente (#0005, AC1) -------
+
+    /**
+     * {@code simulador.callback.url} vazio neste container standalone (sem servico-credito de pe)
+     * -- o disparo do callback e um no-op logado, mas a MUTACAO de {@code ContasLegadoStore} e
+     * independente disso e acontece do mesmo jeito, apos o atraso configurado
+     * ({@code simulador.callback.atraso}, default ~0.5s). O poll curto e o padrao ja estabelecido
+     * neste modulo para aguardar efeito assincrono sem {@code Thread.sleep} de duracao fixa.
+     */
+    @Test
+    void aceite_processaAssincronamente_eConsultaCreditoPassaARefletirONovoVigente() {
+        // Conta 10008: vigente real 180000 centavos no simulador.
+        IntencaoEfetivacao intencao = intencao("10008", 180_000, 250_000);
+
+        ResultadoInstrucaoCore resultado = adapterEfetivacaoContraOSimuladorReal().entregar(intencao);
+        assertThat(resultado).isInstanceOf(ResultadoInstrucaoCore.Aceite.class);
+
+        pollarAteVigenteRefletirONovoValor(new ContaId("10008"), 250_000);
+    }
+
+    /** Poll curto sem {@code Thread.sleep} de duracao fixa -- mesmo espirito de {@code expect.poll} no e2e. */
+    private void pollarAteVigenteRefletirONovoValor(ContaId contaId, long vigenteEsperadoCentavos) {
+        Instant limite = Instant.now().plusSeconds(5);
+        while (Instant.now().isBefore(limite)) {
+            DadosCreditoCore dados = adapterContraOSimuladorReal().consultar(contaId).orElseThrow();
+            if (dados.limiteChequeEspecialVigente().centavos() == vigenteEsperadoCentavos) {
+                return;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+        assertThat(adapterContraOSimuladorReal().consultar(contaId).orElseThrow().limiteChequeEspecialVigente().centavos())
+                .isEqualTo(vigenteEsperadoCentavos);
+    }
 }

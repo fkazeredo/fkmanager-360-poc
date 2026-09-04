@@ -20,6 +20,11 @@ servidor-autorizacao:
   credito-client:
     client-id: ${AUTH_SERVER_CREDITO_CLIENT_ID:servico-credito}
     client-secret: ${AUTH_SERVER_CREDITO_CLIENT_SECRET}
+  # Client do simulador-core-legado (#0005), client_credentials -- confirma o resultado de uma
+  # efetivacao chamando de volta o servico-credito, maquina-a-maquina.
+  simulador-client:
+    client-id: ${AUTH_SERVER_SIMULADOR_CLIENT_ID:simulador-core-legado}
+    client-secret: ${AUTH_SERVER_SIMULADOR_CLIENT_SECRET}
   # login:senha:papel;login:senha:papel -- usuarios de demonstracao, sem identidade_db (ADR-0014).
   demo-users: ${AUTH_SERVER_DEMO_USERS}
 

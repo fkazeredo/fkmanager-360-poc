@@ -74,4 +74,23 @@ public interface SolicitacaoAumentoLimiteRepository extends JpaRepository<Solici
             @Param("status") String status,
             @Param("motivo") String motivo,
             @Param("atualizadaEm") Instant atualizadaEm);
+
+    /**
+     * Conclusao por sucesso (#0005): sem motivo de falha a gravar -- espelha
+     * {@link #atualizarStatusEMotivoFalha} sem a coluna que so faz sentido para
+     * {@code FALHA_EFETIVACAO}.
+     */
+    @Modifying
+    @Query("update SolicitacaoAumentoLimiteEntity s "
+            + "set s.status = :status, s.atualizadaEm = :atualizadaEm "
+            + "where s.id = :id")
+    void atualizarStatus(@Param("id") UUID id, @Param("status") String status, @Param("atualizadaEm") Instant atualizadaEm);
+
+    /**
+     * O {@code LimiteSolicitado} congelado no {@code ContextoDecisaoCredito} (#0005): usado para
+     * conferir coerencia do {@code limiteEfetivado} de um callback de sucesso (AC26) sem carregar
+     * a entity inteira do contexto.
+     */
+    @Query("select s.contexto.limiteSolicitado from SolicitacaoAumentoLimiteEntity s where s.id = :id")
+    long buscarLimiteSolicitadoCongelado(@Param("id") UUID id);
 }

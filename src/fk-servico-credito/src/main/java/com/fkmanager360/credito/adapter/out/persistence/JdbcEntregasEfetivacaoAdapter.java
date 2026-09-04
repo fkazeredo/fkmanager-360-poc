@@ -15,6 +15,7 @@ import com.fkmanager360.credito.domain.LimiteChequeEspecialVigente;
 import com.fkmanager360.credito.domain.LimiteSolicitado;
 import com.fkmanager360.credito.domain.ProtocoloCore;
 import com.fkmanager360.credito.domain.SolicitacaoId;
+import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -229,6 +230,29 @@ public class JdbcEntregasEfetivacaoAdapter implements EntregasEfetivacaoPort {
     @Transactional(propagation = Propagation.MANDATORY)
     public void terminalizarPorFalhaDefinitiva(EntregaEfetivacaoReclamada claim, Instant agora) {
         terminalizar(claim.intencao().messageId(), StatusEntrega.FALHA_DEFINITIVA, ClasseResultado.DEFINITIVO, null, agora);
+    }
+
+    /**
+     * #0005: o callback ja concluiu a solicitacao por outro caminho antes desta chamada -- o
+     * terminal PERSISTIDO dita como a entrega termina tecnicamente, nunca o resultado perdedor do
+     * dispatcher. Mesma exigencia de transacao ativa de {@link #claimAindaValido} -- mesma
+     * composicao, chamada por {@code RegistrarResultadoEfetivacao#executarSobClaim}.
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void terminalizarPorConclusaoConcorrente(
+            EntregaEfetivacaoReclamada claim, StatusSolicitacaoAumentoLimite terminalObservado, Instant agora) {
+        StatusEntrega statusFinal = switch (terminalObservado) {
+            case EFETIVADA -> StatusEntrega.ACEITA;
+            case FALHA_EFETIVACAO -> StatusEntrega.FALHA_DEFINITIVA;
+            default -> throw new IllegalStateException(
+                    "terminalizarPorConclusaoConcorrente: terminal inesperado " + terminalObservado
+                            + " -- so EFETIVADA e FALHA_EFETIVACAO sao alcancaveis por esta via "
+                            + "(uma solicitacao com outbox_entrega so chega aqui apos ser aprovada)");
+        };
+        ClasseResultado classe = terminalObservado == StatusSolicitacaoAumentoLimite.EFETIVADA
+                ? ClasseResultado.ACEITE : ClasseResultado.DEFINITIVO;
+        terminalizar(claim.intencao().messageId(), statusFinal, classe, null, agora);
     }
 
     /**

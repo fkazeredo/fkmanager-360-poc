@@ -19,7 +19,10 @@ da leitura — `LimiteChequeEspecialVigente`, `DadosCreditoCore`, `Classificacao
 não havia estado durável de Credito (ADR-0010, ADR-0014). #0003 materializou o primeiro
 comportamento com estado durável — `credito_db`, a submissão da `SolicitacaoAumentoLimite`, o
 congelamento do `ContextoDecisaoCredito` e a decisão automática da `PoliticaCredito v1` —, deixando
-a efetivação em si (dispatcher, callback, reconciliação) para #0004+.
+a efetivação em si para #0004+: #0004 materializou o dispatcher (entrega da instrução, taxonomia
+de resultados da ACL, `RegistrarResultadoEfetivacao` como caso de uso único de conclusão), #0005 o
+callback de confirmação (a variante de sucesso do mesmo caso de uso, e a convergência entre
+callback e dispatcher sob concorrência real), e a reconciliação fica para #0006.
 
 
 **LimiteChequeEspecial**:

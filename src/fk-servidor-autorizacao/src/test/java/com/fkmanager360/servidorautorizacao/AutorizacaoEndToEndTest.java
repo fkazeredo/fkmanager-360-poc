@@ -36,6 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         // quem sobe o contexto declara os valores. Os daqui sao de teste, nunca de producao.
         "AUTH_SERVER_BFF_CLIENT_SECRET=" + AutorizacaoEndToEndTest.CLIENT_SECRET,
         "AUTH_SERVER_CREDITO_CLIENT_SECRET=" + AutorizacaoEndToEndTest.CREDITO_CLIENT_SECRET,
+        // #0005: client_credentials do simulador-core-legado -- mesmo espirito fail-fast, sem default.
+        "AUTH_SERVER_SIMULADOR_CLIENT_SECRET=segredo-de-teste-simulador",
         "AUTH_SERVER_DEMO_USERS=gerente.a:troque-senha-a:GERENTE_RELACIONAMENTO;gerente.b:troque-senha-b:GERENTE_RELACIONAMENTO",
 })
 @AutoConfigureMockMvc

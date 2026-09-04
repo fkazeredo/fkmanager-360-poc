@@ -5,6 +5,21 @@ spring:
     problemdetails:
       enabled: true
 
+# #0005: uma tentativa assincrona de callback por processamento (nao at-least-once -- ver
+# Javadoc de CallbackDispatcher), disparada apos o atraso abaixo. simulador.callback.url vazio
+# desabilita o disparo -- padrao para perfis standalone e para os @WebMvcTest existentes.
+simulador:
+  callback:
+    url: ${CREDITO_CALLBACK_URL:}
+    atraso: ${SIMULADOR_CALLBACK_ATRASO:PT0.5S}
+    connect-timeout: PT2S
+    read-timeout: PT3S
+    auth:
+      token-uri: ${AUTH_SERVER_ISSUER_URI:}/oauth2/token
+      client-id: ${AUTH_SERVER_SIMULADOR_CLIENT_ID:simulador-core-legado}
+      client-secret: ${AUTH_SERVER_SIMULADOR_CLIENT_SECRET:}
+      scope: credito.callback
+
 server:
   port: 8090
 
