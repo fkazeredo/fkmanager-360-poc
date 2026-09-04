@@ -41,6 +41,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
+                // application.yml nao tem mais default para o client-secret (fail-fast, ADR-0014).
+                "AUTH_SERVER_BFF_CLIENT_SECRET=segredo-de-teste",
                 "spring.autoconfigure.exclude="
                         + "org.springframework.boot.session.data.redis.autoconfigure.SessionDataRedisAutoConfiguration,"
                         + "org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration",

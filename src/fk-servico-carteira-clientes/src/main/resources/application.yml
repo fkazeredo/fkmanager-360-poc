@@ -6,7 +6,7 @@ spring:
     username: ${CARTEIRA_DB_APP_USER}
     password: ${CARTEIRA_DB_APP_PASSWORD}
   # Migracao embutida (ADR-0014, emenda 2026-09-02): DataSource proprio e independente do
-  # spring.datasource.* acima -- a query da aplicacao (JdbcClient) nunca ve a credencial de DDL,
+  # spring.datasource.* acima -- a query da aplicacao (JPA) nunca ve a credencial de DDL,
   # mesmo rodando no mesmo processo.
   flyway:
     url: ${CARTEIRA_DB_JDBC_URL}

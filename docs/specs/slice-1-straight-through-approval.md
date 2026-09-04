@@ -296,8 +296,12 @@ Comando aceito de `app-gerente` via `bff-gerente`, contendo `contaId`, `limiteSo
 `TELEFONE` e `CANAL_DIGITAL`; `observacao` opcional, texto livre, máximo 500 caracteres, com trim, e vazio
 após trim equivalente a ausência).
 
-`clienteId` **não** é aceito no comando — é derivado do vínculo autoritativo. A `OrigemSolicitacao` é
-sempre `CLIENTE`, estabelecida pelo domínio.
+`clienteId` **não** é aceito no corpo do comando — viaja no caminho da requisição (o mesmo par
+`clienteId`/`contaId` da tela de atendimento) e é validado como par contra a operação estreita de
+direito de atendimento de `CarteiraClientes`, que é autoritativa: par que não corresponde ao vínculo
+atual → `403`/`404`, e o corpo não tem como influenciar a identidade. A `OrigemSolicitacao` é sempre
+`CLIENTE`, estabelecida pelo domínio; o `originadorId` vem exclusivamente do `sub` do token, nunca do
+comando.
 
 Valores monetários trafegam e são persistidos em centavos, como inteiro. Ponto flutuante não é usado em
 nenhuma camada (ADR-0005).
@@ -1013,3 +1017,13 @@ carteira, autorização de recurso e acompanhamento.
 
 Este documento nasceu como GitHub issue #1 e migrou para o repositório quando o tracker passou a ser
 markdown versionado. A issue foi removida; não há cópia viva fora daqui.
+
+### 2026-09-03 — franklin.azeredo
+
+Alinhamento textual da seção "Submissão da `SolicitacaoAumentoLimite`" com a forma realizada e
+aprovada nos tickets #0002/#0003 (fechados): o texto original dizia que `clienteId` "é derivado do
+vínculo autoritativo", enquanto a implementação — revisada e aceita — o recebe no caminho da
+requisição e o valida como par contra `/direito-de-atendimento` (par falso → `403`/`404`; o corpo
+nunca influencia identidade). O efeito de segurança exigido (AC23/AC27: corpo não escolhe cliente,
+autorização precede o Core) é idêntico; apenas a descrição da forma estava defasada. Nenhum
+comportamento mudou nesta emenda.

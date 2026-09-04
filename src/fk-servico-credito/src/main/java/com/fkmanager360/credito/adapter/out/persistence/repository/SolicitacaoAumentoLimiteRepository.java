@@ -1,8 +1,10 @@
 package com.fkmanager360.credito.adapter.out.persistence.repository;
 
 import com.fkmanager360.credito.adapter.out.persistence.entity.SolicitacaoAumentoLimiteEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -35,5 +37,41 @@ public interface SolicitacaoAumentoLimiteRepository extends JpaRepository<Solici
             @Param("id") UUID id,
             @Param("status") String status,
             @Param("efetivacaoId") UUID efetivacaoId,
+            @Param("atualizadaEm") Instant atualizadaEm);
+
+    /**
+     * Aceite da instrucao de efetivacao (plano #0004, secao 9): so escreve o {@code protocolo_core}
+     * -- a divergencia com um valor ja existente e decidida ANTES desta chamada (leitura de
+     * {@link #buscarProtocoloCore}), porque o {@code UPDATE} por si so nao tem como recusar
+     * sobrescrever silenciosamente.
+     */
+    @Modifying
+    @Query("update SolicitacaoAumentoLimiteEntity s "
+            + "set s.protocoloCore = :protocoloCore, s.atualizadaEm = :atualizadaEm "
+            + "where s.id = :id")
+    void atualizarProtocoloCore(
+            @Param("id") UUID id, @Param("protocoloCore") String protocoloCore, @Param("atualizadaEm") Instant atualizadaEm);
+
+    @Query("select s.protocoloCore from SolicitacaoAumentoLimiteEntity s where s.id = :id")
+    Optional<String> buscarProtocoloCore(@Param("id") UUID id);
+
+    /**
+     * Correlaciona por {@code EfetivacaoId} -- nunca por {@code ProtocoloCore}, que pode ser
+     * desconhecido quando o aceite se perdeu (ADR-0009, emenda). {@code PESSIMISTIC_WRITE} serializa
+     * concluir-com-resultado contra qualquer outro escritor concorrente da MESMA solicitacao
+     * (callback e reconciliacao, em #0005/#0006, chamarao esta mesma consulta pela mesma porta).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from SolicitacaoAumentoLimiteEntity s where s.efetivacaoId = :efetivacaoId")
+    Optional<SolicitacaoAumentoLimiteEntity> buscarPorEfetivacaoIdParaAtualizar(@Param("efetivacaoId") UUID efetivacaoId);
+
+    @Modifying
+    @Query("update SolicitacaoAumentoLimiteEntity s "
+            + "set s.status = :status, s.motivoFalhaEfetivacao = :motivo, s.atualizadaEm = :atualizadaEm "
+            + "where s.id = :id")
+    void atualizarStatusEMotivoFalha(
+            @Param("id") UUID id,
+            @Param("status") String status,
+            @Param("motivo") String motivo,
             @Param("atualizadaEm") Instant atualizadaEm);
 }

@@ -46,6 +46,11 @@ services:
     build:
       context: .
       dockerfile: src/fk-simulador-core-legado/Dockerfile
+    environment:
+      # #0004: habilita o control plane de cenarios de efetivacao (ADR-0018) para uso manual e
+      # para as jornadas E2E -- deliberadamente separado do contrato funcional, nunca ativo em
+      # producao real.
+      SPRING_PROFILES_ACTIVE: local
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/actuator/health"]
       interval: 5s

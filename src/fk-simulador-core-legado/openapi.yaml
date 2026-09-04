@@ -1,0 +1,415 @@
+openapi: 3.1.0
+info:
+  title: fk-simulador-core-legado
+  description: "Sistema externo simulado (nao e um bounded context deste repositorio).\
+    \ Contrato host-centrico FICTICIO desta POC (ADR-0005) -- nao e replica de nenhum\
+    \ core bancario real. Quatro capacidades: consulta em lote dos dados mestres do\
+    \ Cliente e consulta das contas de um Cliente, ambas consumidas pela ACL de fk-servico-carteira-clientes;\
+    \ consulta dos dados de credito de uma conta e recepcao da instrucao de efetivacao,\
+    \ ambas consumidas pela ACL de fk-servico-credito. Cada contexto integra o legado\
+    \ pela sua propria ACL, apenas na fatia que lhe diz respeito (ADR-0004). fk-bff-gerente\
+    \ nunca chama este servico diretamente (AC30). O control plane de cenarios de\
+    \ efetivacao (ADR-0018), ativo apenas nos profiles local/demo/test, e deliberadamente\
+    \ separado deste contrato funcional e nao aparece aqui."
+  version: "0004"
+servers:
+- url: http://localhost:8090
+  description: "Rede interna do Docker Compose (nome de servico), porta exposta localmente\
+    \ para dev."
+tags:
+- name: conta-legado
+  description: Consulta de contas de um Cliente e dos dados de credito de uma conta.
+- name: cliente-legado
+  description: "Consulta em lote de dados mestres, formato host-centric fictÃ­cio."
+paths:
+  /legado/efetivacoes:
+    post:
+      tags:
+      - conta-legado
+      summary: "Recepcao da instrucao de efetivacao do LimiteChequeEspecial, com deduplicacao\
+        \ por idEft"
+      description: "idEft e idCor carregam UUID por extenso -- identidade de negocio,\
+        \ nao formato host-centric numerico. A MESMA instrucao reenviada (mesmo idEft,\
+        \ mesmo payload) nunca aplica a alteracao duas vezes e devolve o MESMO numPrt;\
+        \ o mesmo idEft com payload diferente e sempre rejeitado explicitamente (codRet\
+        \ 207), nunca tratado como operacao nova. Esta operacao NAO aplica a alteracao\
+        \ no limite consultado por /legado/contas/consulta-credito -- confirmacao\
+        \ e callback pertencem a #0005; consulta de status por protocolo/idEft a #0006."
+      operationId: efetivarLimiteLegado
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EfetivacaoLegadoRequest"
+        required: true
+      responses:
+        "200":
+          description: "Requisicao processada -- aceite, uma das quatro classes de\
+            \ falha definitiva, ou indisponibilidade de negocio conhecida (codRet\
+            \ 998) chegam aqui dentro do 200 (ADR-0005). Este simulador especificamente\
+            \ nunca emite 998 (seus cenarios de control-plane modelam indisponibilidade\
+            \ como HTTP 5xx real) -- o codigo existe no contrato e na ACL porque a\
+            \ taxonomia da operacao o preve como resposta de negocio valida vinda\
+            \ do host, verificado contra WireMock (S4), nao contra este simulador\
+            \ (S5)."
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EfetivacaoLegadoResponse"
+        "400":
+          description: Campo obrigatorio ausente ou fora do formato esperado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: "Indisponibilidade transitoria simulada pelo control plane\
+            \ de cenarios (ADR-0018, perfis local/demo/test) -- sem corpo. No cenario\
+            \ perder-aceite, o aceite E registrado antes do 503: o reenvio do mesmo\
+            \ idEft recupera o mesmo numPrt (AC11)."
+  /legado/contas/consulta:
+    post:
+      tags:
+      - conta-legado
+      summary: "Contas correntes de um Cliente, pelo codigo host"
+      description: "A chave e sempre codCli. Nao existe consulta de conta por numCta\
+        \ neste contrato, e a ausencia e deliberada: nenhum consumidor precisa descobrir\
+        \ o dono de uma conta antes de ja estar autorizado sobre o Cliente, e oferecer\
+        \ essa chave conveniente conviteria a inversao de ordem que a autorizacao\
+        \ de recurso proibe (ADR-0007). Devolve apenas identificacao -- nenhum dado\
+        \ financeiro, porque quem consome esta operacao e CarteiraClientes, que nao\
+        \ e fachada financeira (ADR-0004)."
+      operationId: consultarContasDoClienteLegado
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContasLegadoQueryRequest"
+        required: true
+      responses:
+        "200":
+          description: "Requisicao processada. \"Nenhuma ocorrencia\" chega como codRet\
+            \ 121 dentro do 200, e nao como 404 -- o status HTTP nao carrega o resultado\
+            \ de negocio (ADR-0005)."
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ContasLegadoQueryResponse"
+        "400":
+          description: codCli ausente ou fora do formato de 10 digitos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /legado/contas/consulta-credito:
+    post:
+      tags:
+      - conta-legado
+      summary: "Dados de credito da conta -- limite, situacao e classificacao de risco\
+        \ base"
+      description: "Os tres fatos de credito vem da MESMA resposta, para que a procedencia\
+        \ dentro de Credito seja registrada uma vez para o conjunto. Nenhum dado cadastral\
+        \ do Cliente aparece aqui: isso pertence a CarteiraClientes."
+      operationId: consultarCreditoDaContaLegado
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditoContaLegadoQueryRequest"
+        required: true
+      responses:
+        "200":
+          description: Requisicao processada; conta desconhecida chega como codRet
+            121.
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditoContaLegadoQueryResponse"
+        "400":
+          description: numCta ausente ou fora do formato de 10 digitos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /legado/clientes/consulta-lote:
+    post:
+      tags:
+      - cliente-legado
+      summary: Consulta em lote de dados mestres do Cliente pelo codigo host
+      description: codCli e sempre numero de 10 digitos com zero-padding (formato
+        host). O lote respeita uma quantidade maxima de ocorrencias (OCCURS ficticio
+        desta POC). O status HTTP nao carrega o resultado de negocio por item -- um
+        lote pode ter sucessos e "104 CLIENTE NAO ENCONTRADO" no mesmo 200; codRet/msgRet
+        no nivel do lote referem-se ao processamento da requisicao como um todo.
+      operationId: consultarClientesLegadoEmLote
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientesLegadoQueryRequest"
+        required: true
+      responses:
+        "200":
+          description: Lote processado (pode conter itens com codRet de erro individualmente).
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ClientesLegadoQueryResponse"
+        "400":
+          description: "Requisicao estruturalmente invalida: lista vazia, mais de\
+            \ 50 ocorrencias, ou codCli que nao e uma string de 10 digitos."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+components:
+  schemas:
+    EfetivacaoLegadoRequest:
+      type: object
+      properties:
+        idEft:
+          type: string
+          description: "EfetivacaoId por extenso (UUID) -- identidade de negocio da\
+            \ tentativa, estavel atraves de reenvios."
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          minLength: 1
+        numCta:
+          type: string
+          example: "0000010001"
+          minLength: 1
+          pattern: "^\\d{10}$"
+        vlrLimChqEspEsp:
+          type: string
+          description: "LimiteChequeEspecialVigenteEsperado -- a precondicao congelada\
+            \ no ContextoDecisaoCredito. Centavos, 15 digitos com zero-padding, sem\
+            \ separador."
+          example: "000000000500000"
+          minLength: 1
+          pattern: "^\\d{15}$"
+        vlrLimNov:
+          type: string
+          description: "LimiteSolicitado. Centavos, 15 digitos com zero-padding, sem\
+            \ separador."
+          example: "000000000600000"
+          minLength: 1
+          pattern: "^\\d{15}$"
+        idCor:
+          type: string
+          description: "CorrelationId por extenso (UUID) -- metadado de correlacao,\
+            \ nunca chave de negocio."
+          example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+          minLength: 1
+      required:
+      - idCor
+      - idEft
+      - numCta
+      - vlrLimChqEspEsp
+      - vlrLimNov
+    EfetivacaoLegadoResponse:
+      type: object
+      properties:
+        codRet:
+          type: string
+          description: '"000" aceite; "121" conta nao encontrada; "118" conta bloqueada;
+            "205" limite vigente divergente; "199" instrucao invalida; "207" idEft
+            ja existente com payload incompativel; "998" indisponibilidade transitoria
+            de negocio (nunca emitido por este simulador -- ver descricao do 200 na
+            operacao).'
+          example: "000"
+        msgRet:
+          type: string
+        idEft:
+          type: string
+          description: Ecoado da requisicao.
+        numPrt:
+          type: string
+          description: "ProtocoloCore, 12 digitos com zero-padding. Presente somente\
+            \ no aceite (codRet \"000\")."
+          example: "000000000001"
+        idCor:
+          type: string
+          description: Ecoado da requisicao.
+      required:
+      - codRet
+      - idCor
+      - idEft
+      - msgRet
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        properties:
+          type: object
+          additionalProperties: {}
+    ContasLegadoQueryRequest:
+      type: object
+      properties:
+        codCli:
+          type: string
+          example: "0000000001"
+          minLength: 1
+          pattern: "^\\d{10}$"
+      required:
+      - codCli
+    ContaLegadoItemResponse:
+      type: object
+      properties:
+        numCta:
+          type: string
+          description: "Numero da conta no host, 10 digitos com zero-padding."
+          example: "0000010001"
+        codAge:
+          type: string
+          description: "Codigo da agencia, 4 digitos. Em branco e campo opcional ausente."
+          example: "0001"
+      required:
+      - codAge
+      - numCta
+    ContasLegadoQueryResponse:
+      type: object
+      properties:
+        codRet:
+          type: string
+          description: '"000" sucesso; "121" nenhuma conta encontrada.'
+          example: "000"
+        msgRet:
+          type: string
+        codCli:
+          type: string
+        contas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContaLegadoItemResponse"
+      required:
+      - codCli
+      - codRet
+      - contas
+      - msgRet
+    CreditoContaLegadoQueryRequest:
+      type: object
+      properties:
+        numCta:
+          type: string
+          example: "0000010001"
+          minLength: 1
+          pattern: "^\\d{10}$"
+      required:
+      - numCta
+    CreditoContaLegadoQueryResponse:
+      type: object
+      properties:
+        codRet:
+          type: string
+          description: '"000" sucesso; "121" conta nao encontrada.'
+          example: "000"
+        msgRet:
+          type: string
+        numCta:
+          type: string
+        vlrLimChqEsp:
+          type: string
+          description: "Limite de cheque especial em centavos, 15 digitos com zero-padding\
+            \ e sem separador. Vazio quando codRet nao e sucesso."
+          example: "000000000500000"
+        sitCta:
+          type: string
+          description: "\"01\" regular, \"02\" bloqueada, \"03\" encerrada. Vazio\
+            \ quando codRet nao e sucesso."
+          example: "01"
+        codRscCrd:
+          type: string
+          description: "Classificacao de risco de credito basica do host: \"1\" baixo,\
+            \ \"2\" medio, \"3\" alto. E insumo interno da politica e nunca e apresentada\
+            \ ao GerenteRelacionamento."
+          example: 1
+        datAtuLim:
+          type: string
+          description: "Data em que o PROPRIO HOST atualizou o limite, no formato\
+            \ yyyyMMdd. Nao se confunde com o instante em que a plataforma consultou\
+            \ -- sao conceitos distintos, e a ACL de Credito nao deriva um do outro."
+          example: 20260115
+      required:
+      - codRet
+      - codRscCrd
+      - datAtuLim
+      - msgRet
+      - numCta
+      - sitCta
+      - vlrLimChqEsp
+    ClientesLegadoQueryRequest:
+      type: object
+      properties:
+        codCli:
+          type: array
+          description: "Codigos host do Cliente a consultar em lote, 10 digitos com\
+            \ zero-padding cada."
+          items:
+            type: string
+            pattern: "^\\d{10}$"
+          maxItems: 50
+          minItems: 1
+      required:
+      - codCli
+    ClienteLegadoItemResponse:
+      type: object
+      properties:
+        codCli:
+          type: string
+          description: "Codigo host-centric do Cliente, 10 digitos com zero-padding."
+        codRet:
+          type: string
+          description: '"000" sucesso; "104" cliente nao encontrado.'
+          example: "000"
+        msgRet:
+          type: string
+        nomCli:
+          type: string
+          description: Vazio quando codRet nao e sucesso.
+        numCpf:
+          type: string
+          description: Vazio quando codRet nao e sucesso.
+        sitCad:
+          type: string
+          description: Vazio quando codRet nao e sucesso.
+        datCad:
+          type: string
+          description: Data no formato yyyyMMdd. Vazio quando codRet nao e sucesso.
+      required:
+      - codCli
+      - codRet
+      - datCad
+      - msgRet
+      - nomCli
+      - numCpf
+      - sitCad
+    ClientesLegadoQueryResponse:
+      type: object
+      properties:
+        codRet:
+          type: string
+          description: '"000" quando a requisicao chegou bem formada (falhas estruturais
+            sao 400).'
+          example: "000"
+        msgRet:
+          type: string
+          example: LOTE PROCESSADO
+        clientes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClienteLegadoItemResponse"
+      required:
+      - clientes
+      - codRet
+      - msgRet

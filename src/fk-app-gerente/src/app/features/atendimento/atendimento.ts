@@ -10,11 +10,14 @@ import {
   CanalManifestacao,
   ClienteResumo,
   ContaResumo,
+  EnvelopeErroPublico,
   SolicitacaoAumentoLimiteComando,
   SolicitacaoAumentoLimiteResultado,
 } from '../../core/models';
 import { iniciaisDe } from '../../shared/iniciais';
+import { formatarReais, parseReaisParaCentavos } from '../../shared/reais';
 import { AtendimentoService } from './atendimento-api';
+import { acaoParaErroSubmissao, mensagemDecisao, mensagemDeErro } from './mensagens';
 
 type ResultadoContas = { status: 'sucesso'; itens: ContaResumo[] } | { status: 'erro'; mensagem: string };
 
@@ -310,34 +313,30 @@ export class AtendimentoComponent {
       });
   }
 
+  /**
+   * A DECISAO de cada erro (mensagem + destino da Idempotency-Key) vive na tabela pura de
+   * {@link acaoParaErroSubmissao}; aqui somente os EFEITOS -- e o switch e exaustivo sobre a
+   * uniao discriminada, entao um tipo novo de acao nao compila sem tratamento.
+   */
   private tratarErroSubmissao(resposta: HttpErrorResponse, clienteId: string, contaId: string): void {
-    const status = resposta.status;
-    const codigo: string | undefined = resposta.error?.codigo;
+    const erro: EnvelopeErroPublico | null = resposta.error ?? null;
+    const acao = acaoParaErroSubmissao(resposta.status, erro?.codigo);
 
-    // 409 LIMITE_VIGENTE_DESATUALIZADO -- e SO quando o codigo e exatamente este (plano #0003).
-    // O gerente decide quando reenviar; nao ha reenvio automatico.
-    if (status === 409 && codigo === 'LIMITE_VIGENTE_DESATUALIZADO') {
-      this.idempotencyKeyAtual = null; // nova manifestacao
-      this.erroSubmissao.set(
-        'O limite mudou desde que a tela carregou. O valor vigente foi atualizado -- revise e envie novamente.',
-      );
-      this.atendimentoService.fetchAtendimento(clienteId, contaId).subscribe((dadosAtualizados) => {
-        this.atendimento.set(dadosAtualizados);
-      });
-      return;
+    this.erroSubmissao.set(acao.mensagem);
+    switch (acao.tipo) {
+      case 'limiteDesatualizado':
+        this.idempotencyKeyAtual = null; // nova manifestacao; o gerente decide quando reenviar
+        this.atendimentoService.fetchAtendimento(clienteId, contaId).subscribe((dadosAtualizados) => {
+          this.atendimento.set(dadosAtualizados);
+        });
+        break;
+      case 'bloquearFormulario':
+        this.formularioBloqueado.set(true);
+        break;
+      case 'manterChave':
+        // Reenvio reusa a MESMA key; o backend deduplica.
+        break;
     }
-
-    // 409 SOLICITACAO_NAO_TERMINAL_EXISTENTE: nao recarrega limite, nao cunha key nova, bloqueia
-    // nova tentativa para esta conta (ja existe processo em andamento).
-    if (status === 409 && codigo === 'SOLICITACAO_NAO_TERMINAL_EXISTENTE') {
-      this.formularioBloqueado.set(true);
-      this.erroSubmissao.set(mensagemDeErroSubmissao(status, codigo));
-      return;
-    }
-
-    // 409 IDEMPOTENCIA_EM_PROCESSAMENTO: transitorio -- nao recarrega limite, nao cunha key nova,
-    // o gerente pode tentar de novo com a MESMA key.
-    this.erroSubmissao.set(mensagemDeErroSubmissao(status, codigo));
   }
 
   private resetarFormularioSubmissao(): void {
@@ -370,97 +369,5 @@ export class AtendimentoComponent {
   }
 }
 
-function formatarReais(centavos: number): string {
-  // O backend manda centavos como inteiro (ADR-0005); dividir por 100 aqui, na apresentacao, e o
-  // unico ponto do sistema onde o valor vira decimal.
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(centavos / 100);
-}
-
-/**
- * 502, 503 e 504 renderizam uma unica mensagem de indisponibilidade com acao de repetir, sem
- * expor qual das tres ocorreu -- a distincao permanece em protocolo e diagnostico. O 403 e o 404
- * tem mensagem propria porque significam outra coisa: nao sao falha, sao respostas definitivas
- * sobre o pedido.
- */
-function mensagemDeErro(status: number | undefined): string {
-  if (status === 403) {
-    return 'Voce nao tem direito de atendimento sobre este Cliente.';
-  }
-  if (status === 404) {
-    return 'Conta nao encontrada para este Cliente.';
-  }
-  return 'Nao foi possivel concluir a operacao agora, tente novamente.';
-}
-
-/**
- * Converte o valor em reais digitado pelo gerente para um inteiro de centavos, SEM passar por
- * `parseFloat`/ponto flutuante em nenhum momento (ADR-0005) -- a parte inteira e a fracionaria
- * sao separadas e convertidas como STRINGS, nunca multiplicadas/divididas como fracao decimal.
- *
- * Aceita virgula OU ponto como separador decimal (formulario pt-BR, tolerante a ambos), 0 a 2
- * digitos de fracao. Entrada vazia, so espacos, ou com qualquer caractere fora do padrao
- * `<digitos>[(,|.)<1-2 digitos>]` -- incluindo 3+ digitos de fracao, que descartaria precisao
- * silenciosamente -- devolve `null`: validacao local, antes de qualquer chamada de rede.
- */
-export function parseReaisParaCentavos(valorDigitado: string): number | null {
-  const valor = valorDigitado.trim();
-  if (valor === '') {
-    return null;
-  }
-
-  const casado = /^(\d+)(?:[.,](\d{1,2}))?$/.exec(valor);
-  if (casado === null) {
-    return null;
-  }
-
-  const parteInteira = casado[1];
-  const parteFracionaria = (casado[2] ?? '').padEnd(2, '0');
-
-  const centavos = Number(parteInteira) * 100 + Number(parteFracionaria);
-  return Number.isSafeInteger(centavos) ? centavos : null;
-}
-
-/**
- * O texto exato da decisao (AC29, AC37; spec, secao "Apresentacao"). `FORA_DA_POLITICA_AUTOMATICA`
- * preserva a semantica exata da spec -- nunca afirma risco elevado, problema cadastral ou
- * inelegibilidade permanente. `CONTA_NAO_ELEGIVEL` e `PERFIL_RISCO_INCOMPATIVEL` tem mensagem
- * propria, sem revelar a classificacao de risco bruta ou o status host da conta (a API ja nunca os
- * envia -- aqui e so questao de nao inventar um texto que os exponha).
- */
-function mensagemDecisao(decisao: SolicitacaoAumentoLimiteResultado['decisao']): string {
-  if (decisao.resultado === 'APROVADA') {
-    return 'Solicitacao aprovada automaticamente.';
-  }
-  switch (decisao.motivo) {
-    case 'CONTA_NAO_ELEGIVEL':
-      return 'Esta conta nao esta elegivel para aumento automatico de limite no momento.';
-    case 'PERFIL_RISCO_INCOMPATIVEL':
-      return 'O perfil desta conta nao e compativel com a concessao automatica de limite.';
-    case 'FORA_DA_POLITICA_AUTOMATICA':
-      return 'Esta solicitacao nao se enquadra na politica de concessao automatica vigente.';
-    default:
-      return 'Solicitacao rejeitada.';
-  }
-}
-
-/**
- * Mensagens da submissao alem das ja cobertas por {@link mensagemDeErro} (403/404/502/503/504,
- * reaproveitadas aqui -- AC37: 502/503/504 permanecem uma unica mensagem, sem revelar qual das
- * tres ocorreu). `400`/`422` (COMANDO_ILEGIVEL, COMANDO_INVALIDO,
- * LIMITE_SOLICITADO_NAO_AUMENTA, IDEMPOTENCIA_FINGERPRINT_DIVERGENTE) nunca deveriam acontecer com
- * um formulario bem-comportado -- mensagem generica, sem tentar explicar cada codigo em prosa.
- * `LIMITE_VIGENTE_DESATUALIZADO` tem fluxo proprio e NAO passa por aqui (ver
- * `tratarErroSubmissao`).
- */
-function mensagemDeErroSubmissao(status: number | undefined, codigo: string | undefined): string {
-  if (status === 409 && codigo === 'SOLICITACAO_NAO_TERMINAL_EXISTENTE') {
-    return 'Ja existe um processo em andamento para esta conta. Aguarde a conclusao antes de solicitar novamente.';
-  }
-  if (status === 409 && codigo === 'IDEMPOTENCIA_EM_PROCESSAMENTO') {
-    return 'Sua solicitacao anterior ainda esta sendo processada. Aguarde um instante.';
-  }
-  if (status === 400 || status === 422) {
-    return 'Nao foi possivel processar esta solicitacao. Tente novamente.';
-  }
-  return mensagemDeErro(status);
-}
+// formatarReais/parseReaisParaCentavos vivem em shared/reais.ts; as mensagens e a taxonomia de
+// erro da submissao em ./mensagens.ts -- modulos puros, testados sem TestBed.

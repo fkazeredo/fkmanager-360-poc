@@ -1,0 +1,483 @@
+openapi: 3.1.0
+info:
+  title: fk-bff-gerente
+  description: "Backend-for-frontend do GerenteRelacionamento. Fronteira web -- nao\
+    \ e bounded context (CONTEXT-MAP.md). Conduz Authorization Code + PKCE + OIDC\
+    \ contra fk-servidor-autorizacao, mantem a sessao em Redis via Spring Session\
+    \ e expoe ao app-gerente somente o que o Angular precisa: identidade da sessao\
+    \ corrente, a carteira, e a composicao da tela de atendimento a partir de fk-servico-carteira-clientes\
+    \ e fk-servico-credito (AC30). Nenhum access token ou refresh token atravessa\
+    \ esta fronteira para o browser (AC19) -- o BFF obtem por Token Exchange um token\
+    \ para cada destino e nunca reencaminha o token de login (ADR-0015). Nao implementa\
+    \ regra de credito, nao fala com fk-simulador-core-legado e nao substitui a autorizacao\
+    \ de recurso feita pelos servicos. Produz o seu PROPRIO envelope publico de erro\
+    \ -- nunca repassa o ProblemDetail upstream verbatim."
+  version: "0003"
+servers:
+- url: /bff
+  description: "Origem publica atras do nginx (docker compose), TLS local."
+tags:
+- name: sessao
+  description: "Identidade da sessao corrente, sem expor token."
+- name: carteira
+  description: Listagem da CarteiraClientes (proxy autenticado com Token Exchange).
+- name: atendimento
+  description: Contas do Cliente e a composicao da tela de atendimento a partir dos
+    dois contextos.
+- name: solicitacoes
+  description: Proxy autenticado da submissao da SolicitacaoAumentoLimite -- corpo
+    e Idempotency-Key repassados intactos para fk-servico-credito.
+paths:
+  /api/clientes/{clienteId}/contas/{contaId}/solicitacoes-aumento-limite:
+    post:
+      tags:
+      - solicitacoes
+      summary: Proxy autenticado da submissao da SolicitacaoAumentoLimite
+      description: "Encaminhamento puro para fk-servico-credito, com token trocado\
+        \ por Token Exchange (credito.escrita -- registration distinta da usada no\
+        \ GET do limite vigente, least privilege por operacao). Corpo e Idempotency-Key\
+        \ atravessam INTACTOS: o BFF nao gera, nao regenera e nao reinterpreta nenhum\
+        \ dos dois. Status HTTP de sucesso (201/200) e o corpo sao propagados tal\
+        \ como fk-servico-credito devolveu. Escrita real, sujeita a CSRF (AC20)."
+      operationId: submeterSolicitacaoAumentoLimite
+      parameters:
+      - name: clienteId
+        in: path
+        description: Identificador do Cliente selecionado.
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9]{1,10}$"
+        example: 1
+      - name: contaId
+        in: path
+        description: Identificador da ContaCorrente.
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9]{1,10}$"
+        example: 10001
+      - name: Idempotency-Key
+        in: header
+        description: Repassado intacto para fk-servico-credito -- nunca gerado ou
+          reinterpretado aqui.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        description: Repassado intacto para fk-servico-credito -- o BFF nao desserializa
+          este corpo.
+        content:
+          application/json:
+            schema:
+              type: object
+              description: "Corpo cru, nao desserializado no BFF."
+        required: true
+      responses:
+        "201":
+          description: SolicitacaoAumentoLimite criada agora (independentemente do
+            resultado da decisao).
+          content:
+            application/json:
+              schema:
+                type: object
+                description: "Corpo cru propagado de fk-servico-credito, sem tipagem\
+                  \ no BFF."
+        "200":
+          description: "Replay idempotente -- mesma chave, mesmo fingerprint, operacao\
+            \ ja concluida."
+          content:
+            application/json:
+              schema:
+                type: object
+                description: "Corpo cru propagado de fk-servico-credito, sem tipagem\
+                  \ no BFF."
+        "400":
+          description: "IDEMPOTENCY_KEY_AUSENTE (header ausente, recusado pelo proprio\
+            \ BFF), IDEMPOTENCY_KEY_INVALIDA ou COMANDO_ILEGIVEL (fk-servico-credito),\
+            \ ou IDENTIFICADOR_INVALIDO (clienteId/contaId fora do formato, recusado\
+            \ pelo proprio BFF)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "401":
+          description: Sem sessao autenticada.
+        "403":
+          description: Sem direito de atendimento atual. codigo = SEM_DIREITO_DE_ATENDIMENTO.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "404":
+          description: A conta nao e reconhecida pelo CoreLegado. codigo = CONTA_NAO_ENCONTRADA.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "409":
+          description: "LIMITE_VIGENTE_DESATUALIZADO, SOLICITACAO_NAO_TERMINAL_EXISTENTE\
+            \ ou IDEMPOTENCIA_EM_PROCESSAMENTO."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "422":
+          description: "COMANDO_INVALIDO, LIMITE_SOLICITADO_NAO_AUMENTA ou IDEMPOTENCIA_FINGERPRINT_DIVERGENTE."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "502":
+          description: "codigo desconhecido, corpo upstream ilegivel, ou token delegado\
+            \ recusado (401 da cadeia de Token Exchange -- nunca vira 401 para o browser).\
+            \ codigo = DEPENDENCIA_INDISPONIVEL."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "503":
+          description: fk-servico-credito indisponivel. codigo = DEPENDENCIA_INDISPONIVEL.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+      security:
+      - cookieSessao: []
+  /api/sessao:
+    get:
+      tags:
+      - sessao
+      summary: Identidade do GerenteRelacionamento autenticado na sessao corrente
+      description: "O suficiente para o Angular saber quem esta logado sem inspecionar\
+        \ o cookie de sessao, que e HttpOnly e portanto inacessivel a JavaScript."
+      operationId: consultarSessaoAtual
+      responses:
+        "200":
+          description: Sessao autenticada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "401":
+          description: "Sem sessao autenticada (sem cookie, ou cookie invalido/expirado)."
+      security:
+      - cookieSessao: []
+  /api/clientes/{clienteId}/contas:
+    get:
+      tags:
+      - atendimento
+      summary: ContaCorrentes do Cliente selecionado
+      description: "Encaminhamento autenticado para fk-servico-carteira-clientes,\
+        \ com token trocado para aquele destino. Se a tela nao precisa de composicao,\
+        \ encaminhar e resposta legitima do BFF (ADR-0013)."
+      operationId: listarContasDoCliente
+      parameters:
+      - name: clienteId
+        in: path
+        description: Identificador do Cliente selecionado.
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9]{1,10}$"
+        example: 1
+      responses:
+        "200":
+          description: "Contas do Cliente. Corpo JSON opaco de fk-servico-carteira-clientes,\
+            \ repassado sem tipagem no BFF."
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Corpo cru repassado sem desserializacao no BFF.
+        "400":
+          description: clienteId fora do formato esperado. codigo = IDENTIFICADOR_INVALIDO.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "401":
+          description: Sem sessao autenticada.
+        "403":
+          description: Sem direito de atendimento atual segundo o servico dono do
+            recurso. Status preservado so quando o corpo upstream carrega um codigo
+            publicado na allow-list deste BFF; hoje fk-servico-carteira-clientes ainda
+            nao publica codigo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "502":
+          description: Resposta do servico dono do recurso nao reconhecida pela allow-list
+            deste BFF.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "503":
+          description: fk-servico-carteira-clientes indisponivel ou inalcancavel no
+            momento.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+      security:
+      - cookieSessao: []
+  /api/clientes/{clienteId}/contas/{contaId}/atendimento:
+    get:
+      tags:
+      - atendimento
+      summary: "Modelo de apresentacao da tela de atendimento -- Cliente, ContaCorrente\
+        \ e limite"
+      description: "Composto pelo BFF a partir de fk-servico-carteira-clientes (identidade\
+        \ e vinculo) e fk-servico-credito (limite vigente) -- nenhum dos dois contextos\
+        \ precisa conhecer dado que nao e seu (AC30, ADR-0013). Resultado e modelo\
+        \ de apresentacao, nao agregado. Cada servico verifica o direito de atendimento\
+        \ por conta propria; o BFF nao e enforcement point unico e nao suaviza a recusa\
+        \ de quem e dono do recurso (ADR-0007)."
+      operationId: consultarAtendimento
+      parameters:
+      - name: clienteId
+        in: path
+        description: Identificador do Cliente selecionado.
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9]{1,10}$"
+        example: 1
+      - name: contaId
+        in: path
+        description: Identificador da ContaCorrente.
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9]{1,10}$"
+        example: 10001
+      responses:
+        "200":
+          description: "Cliente, ContaCorrente e LimiteChequeEspecialVigente numa\
+            \ unica resposta."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AtendimentoResponse"
+        "400":
+          description: clienteId ou contaId fora do formato esperado. codigo = IDENTIFICADOR_INVALIDO.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "401":
+          description: Sem sessao autenticada.
+        "403":
+          description: Sem direito de atendimento atual. Status preservado so quando
+            o corpo upstream carrega um codigo da allow-list deste BFF.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "404":
+          description: "A conta nao pertence aquele Cliente, ou nao e reconhecida\
+            \ pelo CoreLegado."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "502":
+          description: Resposta de um Resource Server nao reconhecida pela allow-list
+            deste BFF.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "503":
+          description: "Um dos servicos esta indisponivel. Mensagem unica de negocio:\
+            \ o gerente nao precisa saber qual dependencia caiu."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+      security:
+      - cookieSessao: []
+  /api/carteira/clientes:
+    get:
+      tags:
+      - carteira
+      summary: Pagina da CarteiraClientes do gerente autenticado
+      description: "Proxy autenticado para fk-servico-carteira-clientes: o BFF obtem\
+        \ por Token Exchange um token com audience restrita a servico-carteira-clientes\
+        \ (ADR-0015) e repassa a chamada. O BFF nunca fala com fk-simulador-core-legado\
+        \ (AC30) nem reimplementa a autorizacao de recurso, que pertence ao servico\
+        \ dono (ADR-0007)."
+      operationId: listarClientesDaCarteira
+      parameters:
+      - name: pagina
+        in: query
+        description: Pagina zero-based.
+        required: false
+        schema:
+          type: integer
+          default: 0
+          minimum: 0
+      - name: tamanho
+        in: query
+        description: Tamanho de pagina. Limite e o mesmo de fk-servico-carteira-clientes.
+        required: false
+        schema:
+          type: integer
+          default: 20
+          maximum: 100
+          minimum: 1
+      responses:
+        "200":
+          description: "Pagina da carteira do gerente autenticado. Corpo JSON opaco\
+            \ de fk-servico-carteira-clientes, repassado sem tipagem no BFF."
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Corpo cru repassado sem desserializacao no BFF.
+        "401":
+          description: Sem sessao autenticada.
+        "403":
+          description: "Sem direito de atendimento atual, segundo fk-servico-carteira-clientes.\
+            \ Como esse servico ainda nao publica codigo, esta recusa hoje surge tipicamente\
+            \ como 502 DEPENDENCIA_INDISPONIVEL."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "502":
+          description: "Resposta de fk-servico-carteira-clientes nao reconhecida pela\
+            \ allow-list deste BFF (inclui hoje qualquer 403/404, ate aquele servico\
+            \ publicar codigo)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+        "503":
+          description: fk-servico-carteira-clientes indisponivel ou inalcancavel no
+            momento.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/EnvelopeErroPublico"
+      security:
+      - cookieSessao: []
+  /logout:
+    post:
+      tags:
+      - sessao
+      summary: Encerra a sessao local e devolve o destino de navegacao (RP-Initiated
+        Logout)
+      description: "Endpoint do Spring Security (.logout(...) em SecurityConfig) --\
+        \ sem metodo de controller correspondente para anotar. Escrita real, sujeita\
+        \ a CSRF (AC20): exige o token do cookie XSRF-TOKEN ecoado no header X-XSRF-TOKEN."
+      operationId: encerrarSessao
+      responses:
+        "200":
+          description: Sessao local encerrada; cookie de sessao invalidado. Corpo
+            carrega o destino de navegacao RP-Initiated Logout.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Escrito a mao pelo LogoutSuccessHandler (SecurityConfig)
+                  -- nao ha DTO Java correspondente.
+                properties:
+                  redirectUrl:
+                    type: string
+                    description: "Destino de navegacao do browser apos o logout local:\
+                      \ o end-session-endpoint do servidor-autorizacao (RP-Initiated\
+                      \ Logout, com id_token_hint) quando havia sessao OIDC, ou a\
+                      \ origem publica do app-gerente quando nao havia."
+                    example: https://localhost:4200/connect/logout?id_token_hint=...&post_logout_redirect_uri=...
+        "403":
+          description: Token CSRF ausente ou invalido.
+      security:
+      - cookieSessao: []
+components:
+  schemas:
+    EnvelopeErroPublico:
+      type: object
+      description: "Envelope publico de erro do BFF -- so status+codigo, nunca o ProblemDetail\
+        \ (RFC 7807) de um Resource Server verbatim."
+      properties:
+        status:
+          type: integer
+          format: int32
+          description: "Status HTTP, espelhado do valor devolvido na resposta."
+          example: 403
+        codigo:
+          type: string
+          description: Codigo estavel do dominio. Omitido (nao null explicito) quando
+            o upstream nao publica um -- caso de fk-servico-carteira-clientes em 403/404.
+          enum:
+          - IDEMPOTENCY_KEY_AUSENTE
+          - IDEMPOTENCY_KEY_INVALIDA
+          - COMANDO_ILEGIVEL
+          - IDENTIFICADOR_INVALIDO
+          - SEM_DIREITO_DE_ATENDIMENTO
+          - CONTA_NAO_ENCONTRADA
+          - LIMITE_VIGENTE_DESATUALIZADO
+          - SOLICITACAO_NAO_TERMINAL_EXISTENTE
+          - IDEMPOTENCIA_EM_PROCESSAMENTO
+          - COMANDO_INVALIDO
+          - LIMITE_SOLICITADO_NAO_AUMENTA
+          - IDEMPOTENCIA_FINGERPRINT_DIVERGENTE
+          - DEPENDENCIA_INDISPONIVEL
+    SessionResponse:
+      type: object
+      properties:
+        gerenteId:
+          type: string
+          description: Identificador do GerenteRelacionamento autenticado (claim sub
+            do id_token).
+          example: gerente.a
+    AtendimentoResponse:
+      type: object
+      properties:
+        cliente:
+          $ref: "#/components/schemas/ClienteResumo"
+        conta:
+          $ref: "#/components/schemas/ContaResumo"
+        limiteChequeEspecialVigente:
+          type: integer
+          format: int64
+          description: "Valor em CENTAVOS, como inteiro (ADR-0005). A formatacao em\
+            \ reais pertence ao fk-app-gerente -- nenhum texto de interface vem do\
+            \ backend."
+          example: 500000
+        consultadoEm:
+          type: string
+          format: date-time
+          description: Instante em que a plataforma leu o limite do CoreLegado.
+    ClienteResumo:
+      type: object
+      properties:
+        clienteId:
+          type: string
+          example: 1
+        nome:
+          type: string
+        cpfMascarado:
+          type: string
+          example: '***.456.789-**'
+    ContaResumo:
+      type: object
+      properties:
+        contaId:
+          type: string
+          example: 10001
+        agencia:
+          type: string
+          example: "0001"
+  securitySchemes:
+    cookieSessao:
+      type: apiKey
+      description: "Cookie de sessao opaco (Spring Session/Redis), HttpOnly, Secure,\
+        \ SameSite=Lax. Nunca carrega access token ou refresh token -- eles ficam\
+        \ no OAuth2AuthorizedClientRepository, server-side."
+      name: SESSION
+      in: cookie

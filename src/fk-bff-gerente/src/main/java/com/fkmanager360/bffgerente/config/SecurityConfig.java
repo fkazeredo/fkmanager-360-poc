@@ -55,6 +55,11 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // Documentacao, nao dado de negocio (ADR-0019): o contrato gerado
+                        // (src/fk-bff-gerente/openapi.yaml) e regenerado a partir destes mesmos
+                        // paths -- exigir sessao aqui so quebraria a propria regeneracao.
+                        .requestMatchers("/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**",
+                                "/swagger-ui.html", "/swagger-ui/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2
                         // Sem isto, o alvo padrao pos-login e "/" -- e como bff-gerente tem

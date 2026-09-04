@@ -31,12 +31,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * gerente ja autenticado (mesma autoridade que o UserDetailsService real concede) e focamos no
  * que e nosso: enforcement de PKCE, claims emitidas e a fronteira de audience do Token Exchange.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
+        // application.yml nao tem mais defaults para segredos (fail-fast, espirito de ADR-0014):
+        // quem sobe o contexto declara os valores. Os daqui sao de teste, nunca de producao.
+        "AUTH_SERVER_BFF_CLIENT_SECRET=" + AutorizacaoEndToEndTest.CLIENT_SECRET,
+        "AUTH_SERVER_CREDITO_CLIENT_SECRET=" + AutorizacaoEndToEndTest.CREDITO_CLIENT_SECRET,
+        "AUTH_SERVER_DEMO_USERS=gerente.a:troque-senha-a:GERENTE_RELACIONAMENTO;gerente.b:troque-senha-b:GERENTE_RELACIONAMENTO",
+})
 @AutoConfigureMockMvc
 class AutorizacaoEndToEndTest {
 
     private static final String CLIENT_ID = "bff-gerente";
-    private static final String CLIENT_SECRET = "troque-este-client-secret";
+    static final String CLIENT_SECRET = "segredo-de-teste-bff";
     // Precisa bater EXATAMENTE com o default de servidor-autorizacao.bff-client.redirect-uri em
     // application.yml: Spring Authorization Server compara redirect_uri por string completa
     // (scheme + host + porta + path), entao a porta 4200 -- que o app-gerente passou a publicar
@@ -44,7 +50,7 @@ class AutorizacaoEndToEndTest {
     // exatamente o que aconteceu ao mudar a porta sem atualizar esta constante.
     private static final String REDIRECT_URI = "https://localhost:4200/bff/login/oauth2/code/servidor-autorizacao";
     private static final String CREDITO_CLIENT_ID = "servico-credito";
-    private static final String CREDITO_CLIENT_SECRET = "troque-este-client-secret";
+    static final String CREDITO_CLIENT_SECRET = "segredo-de-teste-credito";
 
     @Autowired
     private MockMvc mockMvc;

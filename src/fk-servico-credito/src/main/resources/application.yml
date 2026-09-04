@@ -43,7 +43,7 @@ spring:
           carteira-clientes-exchange:
             provider: servidor-autorizacao
             client-id: ${AUTH_SERVER_CREDITO_CLIENT_ID:servico-credito}
-            client-secret: ${AUTH_SERVER_CREDITO_CLIENT_SECRET:troque-este-client-secret}
+            client-secret: ${AUTH_SERVER_CREDITO_CLIENT_SECRET}
             authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
             scope: carteira.leitura
         provider:
@@ -57,6 +57,26 @@ credito:
     base-url: ${CORE_LEGADO_BASE_URL}
     connect-timeout: PT2S
     read-timeout: PT3S
+  # Dispatcher de efetivacao (plano #0004): defaults de demonstracao aproximados da spec --
+  # backoff 1s/2s/4s com jitter de 20%, lease de 30s, tentativa inicial + 3 retries. O profile
+  # test os colapsa para milissegundos (nenhum teste dorme minutos reais, ADR-0018).
+  efetivacao:
+    entrega:
+      habilitada: true
+      poll-interval: PT1S
+      lote: 10
+      max-tentativas: 4
+      backoff-base: PT1S
+      backoff-teto: PT4S
+      jitter-fator: 0.2
+      lease: PT30S
+      core:
+        # Deliberadamente mais folgado que credito.core-legado.read-timeout (PT3S): aquele e o
+        # caminho SINCRONO do atendimento; este e o dispatcher em background, sem usuario esperando
+        # na tela -- um timeout tao curto quanto o sincrono classificaria um Core lento-mas-saudavel
+        # como FalhaTransitoria e queimaria tentativas do orcamento de retry por nada.
+        connect-timeout: PT2S
+        read-timeout: PT5S
   carteira-clientes:
     base-url: ${CARTEIRA_CLIENTES_BASE_URL}
     connect-timeout: PT2S

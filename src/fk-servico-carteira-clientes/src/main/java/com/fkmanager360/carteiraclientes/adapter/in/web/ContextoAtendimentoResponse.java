@@ -1,6 +1,7 @@
 package com.fkmanager360.carteiraclientes.adapter.in.web;
 
 import com.fkmanager360.carteiraclientes.domain.ContextoAtendimento;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * O contexto de atendimento na borda, com dois consumidores de necessidades diferentes: o
@@ -13,10 +14,11 @@ import com.fkmanager360.carteiraclientes.domain.ContextoAtendimento;
  * a composicao de tela -- e real hoje.
  */
 record ContextoAtendimentoResponse(
-        String clienteId,
-        String nome,
-        String cpfMascarado,
-        ContaResumoResponse conta) {
+        @Schema(description = "O clienteId autoritativo -- o unico campo que fk-servico-credito consome.",
+                example = "1", requiredMode = Schema.RequiredMode.REQUIRED) String clienteId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String nome,
+        @Schema(example = "***.456.789-**", requiredMode = Schema.RequiredMode.REQUIRED) String cpfMascarado,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) ContaResumoResponse conta) {
 
     static ContextoAtendimentoResponse de(ContextoAtendimento contexto) {
         return new ContextoAtendimentoResponse(

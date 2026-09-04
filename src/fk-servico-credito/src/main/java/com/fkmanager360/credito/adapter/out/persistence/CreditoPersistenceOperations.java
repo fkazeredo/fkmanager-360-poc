@@ -27,6 +27,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
 import java.util.UUID;
 
 /**
@@ -161,6 +162,18 @@ public class CreditoPersistenceOperations {
             // Rejeicao NUNCA passa por aqui: nenhuma linha de Outbox nasce fora deste ramo.
             OutboxMensagemEntity outbox = OutboxMensagemEntity.de(id.valor(), intencaoOuNull, decisao.decididaEm());
             outboxRepository.saveAndFlush(outbox);
+
+            // #0004: a entrega nasce PENDENTE atomicamente com a intencao, no MESMO commit de TX2
+            // (plano #0004, secao 3). outbox_entrega nao tem entity JPA propria -- ninguem mais
+            // insere nesta tabela, so o dispatcher faz UPDATE sob lock (JdbcEntregasEfetivacaoAdapter,
+            // mesma justificativa de raw SQL do FOR UPDATE NOWAIT abaixo, ADR-0023).
+            jdbcClient.sql("""
+                    insert into outbox_entrega (message_id, status_entrega, tentativas, proxima_tentativa_em, atualizado_em)
+                    values (:messageId, 'PENDENTE', 0, :agora, :agora)
+                    """)
+                    .param("messageId", intencaoOuNull.messageId())
+                    .param("agora", Timestamp.from(decisao.decididaEm()))
+                    .update();
         }
 
         HistoricoSolicitacaoEntity historico = HistoricoSolicitacaoEntity.de(id.valor(), entrada);

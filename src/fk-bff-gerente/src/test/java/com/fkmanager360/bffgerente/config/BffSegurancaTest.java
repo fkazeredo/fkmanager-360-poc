@@ -51,6 +51,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         // HttpOnly/SameSite/Path atraves de um container servlet real.
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
+                // application.yml nao tem mais default para o client-secret (fail-fast, ADR-0014).
+                "AUTH_SERVER_BFF_CLIENT_SECRET=segredo-de-teste",
                 // application.yml ja usa endpoints explicitos (nao issuer-uri), entao nenhuma
                 // descoberta OIDC acontece na inicializacao -- so redireciona os endpoints para
                 // um host inalcancavel, ja que nenhum destes testes completa login de verdade.

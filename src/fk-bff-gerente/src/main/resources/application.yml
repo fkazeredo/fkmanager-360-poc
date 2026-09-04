@@ -19,7 +19,7 @@ spring:
         registration:
           servidor-autorizacao:
             client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
-            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
+            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET}
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             # O login carrega as capacidades que a jornada inteira usa; cada troca adiante
@@ -32,13 +32,13 @@ spring:
           carteira-clientes-exchange:
             provider: servidor-autorizacao
             client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
-            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
+            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET}
             authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
             scope: carteira.leitura
           credito-leitura-exchange:
             provider: servidor-autorizacao
             client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
-            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
+            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET}
             authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
             # carteira.leitura entra aqui porque servico-credito precisa continuar a operacao
             # contra servico-carteira-clientes -- e a capacidade que a proxima perna da cadeia
@@ -47,7 +47,7 @@ spring:
           credito-escrita-exchange:
             provider: servidor-autorizacao
             client-id: ${AUTH_SERVER_BFF_CLIENT_ID:bff-gerente}
-            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET:troque-este-client-secret}
+            client-secret: ${AUTH_SERVER_BFF_CLIENT_SECRET}
             authorization-grant-type: "urn:ietf:params:oauth:grant-type:token-exchange"
             # Least privilege por operacao (plano #0003): a submissao (POST) usa credito.escrita,
             # nunca credito.leitura -- sao duas registrations para o MESMO destino, distinguidas

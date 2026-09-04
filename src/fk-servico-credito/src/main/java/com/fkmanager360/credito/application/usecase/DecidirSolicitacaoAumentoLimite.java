@@ -91,6 +91,7 @@ public class DecidirSolicitacaoAumentoLimite {
                 carga.contexto().dadosCreditoCore().limiteChequeEspecialVigente(),
                 carga.contexto().limiteSolicitado(),
                 resultadoAplicacao.decisaoVigente(),
+                carga.registradaEm(),
                 false,
                 resultadoAplicacao.decidiuAgora());
     }

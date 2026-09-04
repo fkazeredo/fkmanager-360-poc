@@ -4,6 +4,8 @@ import com.fkmanager360.credito.application.port.out.EntradaHistorico;
 import com.fkmanager360.credito.application.port.out.TipoFatoHistorico;
 import com.fkmanager360.credito.domain.AtorHumano;
 import com.fkmanager360.credito.domain.AtorId;
+import com.fkmanager360.credito.domain.AtorOperacao;
+import com.fkmanager360.credito.domain.AtorSistema;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -83,6 +85,43 @@ public class HistoricoSolicitacaoEntity {
                         "SOLICITACAO:" + solicitacaoId,
                         TipoFatoHistorico.SOLICITACAO_REGISTRADA,
                         new AtorHumano(originadorId),
+                        ocorridoEm));
+    }
+
+    /**
+     * #0004, primeira tentativa de entrega (plano #0004, secao 2): fatoId deterministico a partir
+     * da solicitacaoId -- reenvios NUNCA produzem uma segunda entrada, porque so a primeira
+     * reclamacao (tentativa=1) chama este metodo.
+     */
+    public static HistoricoSolicitacaoEntity efetivacaoSolicitada(UUID solicitacaoId, Instant ocorridoEm) {
+        return de(
+                solicitacaoId,
+                new EntradaHistorico(
+                        "EFETIVACAO:" + solicitacaoId,
+                        TipoFatoHistorico.EFETIVACAO_SOLICITADA,
+                        AtorSistema.MOTOR_DECISAO_CREDITO,
+                        ocorridoEm));
+    }
+
+    /** #0004, aceite da instrucao (plano #0004, secao 2). Autor CORE_LEGADO: quem informou o fato. */
+    public static HistoricoSolicitacaoEntity instrucaoAceitaPeloCore(UUID solicitacaoId, Instant ocorridoEm) {
+        return de(
+                solicitacaoId,
+                new EntradaHistorico(
+                        "ACEITE:" + solicitacaoId,
+                        TipoFatoHistorico.INSTRUCAO_ACEITA_PELO_CORE,
+                        AtorSistema.CORE_LEGADO,
+                        ocorridoEm));
+    }
+
+    /** #0004, conclusao definitiva ja no aceite (AC15). #0005/#0006 reusam o mesmo fatoId/tipo. */
+    public static HistoricoSolicitacaoEntity resultadoEfetivacaoRegistrado(UUID solicitacaoId, AtorOperacao autor, Instant ocorridoEm) {
+        return de(
+                solicitacaoId,
+                new EntradaHistorico(
+                        "RESULTADO:" + solicitacaoId,
+                        TipoFatoHistorico.RESULTADO_EFETIVACAO_REGISTRADO,
+                        autor,
                         ocorridoEm));
     }
 }

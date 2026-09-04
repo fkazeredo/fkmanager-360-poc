@@ -1,6 +1,7 @@
 package com.fkmanager360.simuladorcorelegado.adapter.in.web;
 
 import com.fkmanager360.simuladorcorelegado.domain.ClienteLegadoRecord;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Resultado por ocorrencia do lote. {@code codRet}/{@code msgRet} sao proprios do item: um lote
@@ -9,12 +10,22 @@ import com.fkmanager360.simuladorcorelegado.domain.ClienteLegadoRecord;
  * {@code codRet} nao e sucesso.
  */
 public record ClienteLegadoItemResponse(
+        @Schema(description = "Codigo host-centric do Cliente, 10 digitos com zero-padding.",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String codCli,
+        @Schema(description = "\"000\" sucesso; \"104\" cliente nao encontrado.", example = "000",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String codRet,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         String msgRet,
+        @Schema(description = "Vazio quando codRet nao e sucesso.", requiredMode = Schema.RequiredMode.REQUIRED)
         String nomCli,
+        @Schema(description = "Vazio quando codRet nao e sucesso.", requiredMode = Schema.RequiredMode.REQUIRED)
         String numCpf,
+        @Schema(description = "Vazio quando codRet nao e sucesso.", requiredMode = Schema.RequiredMode.REQUIRED)
         String sitCad,
+        @Schema(description = "Data no formato yyyyMMdd. Vazio quando codRet nao e sucesso.",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String datCad
 ) {
 

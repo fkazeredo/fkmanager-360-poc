@@ -193,7 +193,8 @@ class DecidirSolicitacaoAumentoLimiteTest {
 
         @Override
         public CargaParaDecisao carregarParaDecisao(SolicitacaoId id) {
-            return new CargaParaDecisao(status.get(id), contextos.get(id), contas.get(id), correlationIds.get(id));
+            return new CargaParaDecisao(status.get(id), contextos.get(id), contas.get(id), correlationIds.get(id),
+                    Instant.parse("2026-09-03T10:00:00Z"));
         }
 
         @Override

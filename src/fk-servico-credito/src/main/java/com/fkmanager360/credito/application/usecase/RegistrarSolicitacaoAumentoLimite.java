@@ -182,7 +182,7 @@ public class RegistrarSolicitacaoAumentoLimite {
         return new ResultadoSubmissao(
                 resultado.solicitacaoId(), resultado.contaId(), resultado.status(),
                 resultado.limiteChequeEspecialVigente(), resultado.limiteSolicitado(),
-                resultado.decisao(), criacaoNova, resultado.decidiuAgora());
+                resultado.decisao(), resultado.registradaEm(), criacaoNova, resultado.decidiuAgora());
     }
 
     private static void validarLocalmente(ComandoSolicitacaoAumentoLimite comando) {

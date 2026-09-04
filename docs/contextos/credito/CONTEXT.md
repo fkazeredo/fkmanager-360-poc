@@ -189,9 +189,11 @@ _Evitar_: Aprovação, Conclusão, Aplicação
 Identidade de negócio da tentativa lógica de efetivação, criada por Credito quando a intenção é
 registrada duravelmente, e estável por toda a vida dela. É a chave de idempotência perante o
 CoreLegado — reenviar a mesma instrução não aplica a alteração duas vezes — e permite recuperar o
-resultado quando o aceite se perdeu antes de o ProtocoloCore ser conhecido. Não é o identificador
-da mensagem no Outbox, que é técnico e pode mudar a cada reenvio.
-_Evitar_: messageId, Id da mensagem, Id técnico da efetivação
+resultado quando o aceite se perdeu antes de o ProtocoloCore ser conhecido. É distinto do
+identificador técnico da mensagem no Outbox (messageId) — que identifica a mensagem registrada, não
+a operação perante o Core — mas os dois são igualmente estáveis: um reenvio nunca gera nem troca
+nenhum dos dois.
+_Evitar_: Id técnico da efetivação
 
 **ProtocoloCore**:
 Identificador devolvido pelo CoreLegado ao aceitar uma instrução de EfetivacaoLimite. É o que

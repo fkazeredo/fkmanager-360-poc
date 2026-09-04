@@ -48,6 +48,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
+                // application.yml nao tem mais default para o client-secret (fail-fast, ADR-0014).
+                "AUTH_SERVER_BFF_CLIENT_SECRET=segredo-de-teste",
                 // O objeto deste teste e a composicao, nao a sessao: sem estas exclusoes, uma
                 // requisicao anonima tentaria abrir sessao em Redis de verdade. Sessao, cookie e
                 // CSRF sao provados em BffSegurancaTest, contra um Redis real.

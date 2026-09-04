@@ -1,5 +1,7 @@
 package com.fkmanager360.bffgerente.adapter.in.web;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.Instant;
 
 /**
@@ -11,12 +13,22 @@ import java.time.Instant;
  * <p>O limite continua em centavos: a formatacao em reais pertence ao app-gerente, e nenhum texto
  * de interface vem do backend.
  */
-record AtendimentoResponse(ClienteResumo cliente, ContaResumo conta, long limiteChequeEspecialVigente, Instant consultadoEm) {
+record AtendimentoResponse(
+        ClienteResumo cliente,
+        ContaResumo conta,
+        @Schema(description = "Valor em CENTAVOS, como inteiro (ADR-0005). A formatacao em reais pertence ao "
+                + "fk-app-gerente -- nenhum texto de interface vem do backend.", example = "500000") long limiteChequeEspecialVigente,
+        @Schema(description = "Instante em que a plataforma leu o limite do CoreLegado.") Instant consultadoEm) {
 
-    record ClienteResumo(String clienteId, String nome, String cpfMascarado) {
+    record ClienteResumo(
+            @Schema(example = "1") String clienteId,
+            String nome,
+            @Schema(example = "***.456.789-**") String cpfMascarado) {
     }
 
-    record ContaResumo(String contaId, String agencia) {
+    record ContaResumo(
+            @Schema(example = "10001") String contaId,
+            @Schema(example = "0001") String agencia) {
     }
 
     /**

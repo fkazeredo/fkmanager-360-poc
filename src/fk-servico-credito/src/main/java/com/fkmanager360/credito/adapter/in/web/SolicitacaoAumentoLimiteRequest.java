@@ -1,5 +1,7 @@
 package com.fkmanager360.credito.adapter.in.web;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * O corpo aceito na submissao (spec, secao "Submissao da SolicitacaoAumentoLimite"; plano #0003,
  * secao 9). Campos numericos ({@code limiteSolicitado}, {@code limiteVigenteVisto}) sao
@@ -20,10 +22,19 @@ package com.fkmanager360.credito.adapter.in.web;
  * enviar {@code "clienteId": "999999"} ou {@code "originadorId": "outro-gerente"} e simplesmente
  * ignorado, nunca lido (AC27 e o guardrail de autoria do controller).
  */
+@Schema(description = "Nao declara clienteId, contaId nem origemSolicitacao -- vem do path ou sao fixados pelo dominio.")
 record SolicitacaoAumentoLimiteRequest(
-        Long limiteSolicitado,
-        Long limiteVigenteVisto,
-        ManifestacaoClienteRequest manifestacaoCliente) {
+        @Schema(description = "Em centavos. Numerico deliberadamente: um valor estruturalmente "
+                + "impossivel (ex.: uma string) falha na desserializacao (400), nunca na validacao semantica (422).",
+                example = "600000", requiredMode = Schema.RequiredMode.REQUIRED) Long limiteSolicitado,
+        @Schema(description = "O LimiteChequeEspecialVigente que o gerente viu na tela -- nunca "
+                + "autoritativo, so optimistic check.", example = "500000",
+                requiredMode = Schema.RequiredMode.REQUIRED) Long limiteVigenteVisto,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) ManifestacaoClienteRequest manifestacaoCliente) {
 
-    record ManifestacaoClienteRequest(String canalManifestacao, String observacao) {}
+    record ManifestacaoClienteRequest(
+            @Schema(allowableValues = {"PRESENCIAL", "TELEFONE", "CANAL_DIGITAL"},
+                    requiredMode = Schema.RequiredMode.REQUIRED) String canalManifestacao,
+            @Schema(description = "Opcional, com trim; vazia apos trim equivale a ausente.", maxLength = 500,
+                    nullable = true) String observacao) {}
 }

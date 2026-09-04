@@ -1,6 +1,7 @@
 package com.fkmanager360.bffgerente.adapter.in.web;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -221,6 +222,17 @@ class GlobalExceptionHandler {
      * codigo e informacao legitima, nao um valor a fingir que existe.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    record EnvelopeErroPublico(int status, String codigo) {
+    @Schema(description = "Envelope publico de erro do BFF -- so status+codigo, nunca o ProblemDetail "
+            + "(RFC 7807) de um Resource Server verbatim.")
+    record EnvelopeErroPublico(
+            @Schema(description = "Status HTTP, espelhado do valor devolvido na resposta.", example = "403") int status,
+            @Schema(description = "Codigo estavel do dominio. Omitido (nao null explicito) quando o upstream "
+                    + "nao publica um -- caso de fk-servico-carteira-clientes em 403/404.",
+                    nullable = true,
+                    allowableValues = {"IDEMPOTENCY_KEY_AUSENTE", "IDEMPOTENCY_KEY_INVALIDA", "COMANDO_ILEGIVEL",
+                            "IDENTIFICADOR_INVALIDO", "SEM_DIREITO_DE_ATENDIMENTO", "CONTA_NAO_ENCONTRADA",
+                            "LIMITE_VIGENTE_DESATUALIZADO", "SOLICITACAO_NAO_TERMINAL_EXISTENTE",
+                            "IDEMPOTENCIA_EM_PROCESSAMENTO", "COMANDO_INVALIDO", "LIMITE_SOLICITADO_NAO_AUMENTA",
+                            "IDEMPOTENCIA_FINGERPRINT_DIVERGENTE", "DEPENDENCIA_INDISPONIVEL"}) String codigo) {
     }
 }
