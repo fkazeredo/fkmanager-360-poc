@@ -293,6 +293,25 @@ class JpaSolicitacoesAumentoLimiteAdapterTest {
         static org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor persistenceExceptionTranslationPostProcessor() {
             return new org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor();
         }
+
+        // #0006: CreditoPersistenceOperations ganhou dois construtor-params @Value (janela de
+        // reconciliacao). Sem este configurer, "${...}" nunca e resolvido -- nem para o default.
+        @Bean
+        static org.springframework.context.support.PropertySourcesPlaceholderConfigurer propertySourcesPlaceholderConfigurer() {
+            return new org.springframework.context.support.PropertySourcesPlaceholderConfigurer();
+        }
+
+        // Resolver o placeholder para a STRING "PT60S" nao basta: o Spring Framework puro (ao
+        // contrario de uma aplicacao Spring Boot de verdade, que registra isto via autoconfiguracao)
+        // nao sabe converter String -> java.time.Duration sem um ConversionService que entenda o
+        // formato -- daí o nome de bean exato "conversionService", que AbstractApplicationContext
+        // procura especificamente para instalar no BeanFactory. Nenhuma property e definida neste
+        // contexto minimo de teste de proposito: os testes deste arquivo exercitam exatamente os
+        // DEFAULTS documentados em application.yml (PT60S / PT10M).
+        @Bean(name = "conversionService")
+        static org.springframework.core.convert.ConversionService conversionService() {
+            return new org.springframework.boot.convert.ApplicationConversionService();
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -504,6 +523,41 @@ class JpaSolicitacoesAumentoLimiteAdapterTest {
         assertThat(efetivacaoIdPersistido).isEqualTo(intencao.efetivacaoId().valor());
 
         assertThat(contarPor("outbox_mensagem", "efetivacao_id", intencao.efetivacaoId().valor())).isEqualTo(1L);
+
+        // #0006: a agenda de reconciliacao nasce no MESMO commit de TX2, PENDENTE.
+        assertThat(contarPor("reconciliacao_efetivacao", "efetivacao_id", intencao.efetivacaoId().valor())).isEqualTo(1L);
+        String statusReconciliacao = appJdbcClient.sql(
+                        "select status_reconciliacao from reconciliacao_efetivacao where efetivacao_id = :id")
+                .param("id", intencao.efetivacaoId().valor()).query(String.class).single();
+        assertThat(statusReconciliacao).isEqualTo("PENDENTE");
+    }
+
+    /**
+     * #0006: proxima_consulta_em/janela_expira_em derivam do instante da PROPRIA decisao (TX2),
+     * com os defaults de application.yml (nenhuma property definida neste contexto minimo de
+     * teste -- ver Javadoc de {@code propertySourcesPlaceholderConfigurer}): elegivel-apos=PT60S,
+     * janela=PT10M. proxima_consulta_em < janela_expira_em por construcao.
+     */
+    @Test
+    void aplicarDecisao_aprovada_gravaAgendaDeReconciliacaoComTemporalidadeDerivadaDaDecisao() {
+        ContaId contaId = novaContaId();
+        SolicitacaoId id = registrarNova(contaId, novaIdempotencyKey(), "fp-reconciliacao-temporal");
+        CorrelationId correlationId = adapter.carregarParaDecisao(id).correlationId();
+        Instant decididaEm = Instant.parse("2026-09-05T09:00:00Z");
+        IntencaoEfetivacao intencao = intencaoPara(contaId, correlationId);
+
+        adapter.aplicarDecisao(id, decisaoAprovada(decididaEm), intencao, entradaDecisao(id, decididaEm));
+
+        Instant proximaConsultaEm = appJdbcClient.sql(
+                        "select proxima_consulta_em from reconciliacao_efetivacao where efetivacao_id = :id")
+                .param("id", intencao.efetivacaoId().valor()).query(Timestamp.class).single().toInstant();
+        Instant janelaExpiraEm = appJdbcClient.sql(
+                        "select janela_expira_em from reconciliacao_efetivacao where efetivacao_id = :id")
+                .param("id", intencao.efetivacaoId().valor()).query(Timestamp.class).single().toInstant();
+
+        assertThat(proximaConsultaEm).isEqualTo(decididaEm.plusSeconds(60));
+        assertThat(janelaExpiraEm).isEqualTo(decididaEm.plus(java.time.Duration.ofMinutes(10)));
+        assertThat(proximaConsultaEm).isBefore(janelaExpiraEm);
     }
 
     @Test

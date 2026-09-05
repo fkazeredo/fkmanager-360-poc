@@ -132,7 +132,15 @@
             </div>
           }
         </dl>
-        <p class="status-solicitacao">Status: {{ resultado.status }}</p>
+        @if (apresentacaoDoStatus(); as apresentacao) {
+          <p
+            class="status-solicitacao"
+            [class.status-tom-acompanhamento]="apresentacao.tom === 'acompanhamento'"
+            [class.status-tom-sucesso]="apresentacao.tom === 'sucesso'"
+            [class.status-tom-erro]="apresentacao.tom === 'erro'">
+            {{ apresentacao.mensagem }}
+          </p>
+        }
       </div>
     }
   }

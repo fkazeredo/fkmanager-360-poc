@@ -124,4 +124,21 @@ public class HistoricoSolicitacaoEntity {
                         autor,
                         ocorridoEm));
     }
+
+    /**
+     * #0006, janela normal de recuperacao automatica esgotada sem resultado autoritativo (AC16):
+     * fatoId deterministico a partir da solicitacaoId -- reentradas na mesma transicao (nunca
+     * deveria acontecer, mas a UNIQUE em fato_id garante que mesmo assim nao duplicaria) nunca
+     * produzem uma segunda entrada. Autor sempre {@link AtorSistema#RECONCILIACAO_EFETIVACAO}: quem
+     * OBSERVOU a ausencia de resposta dentro da janela, nao quem informou um fato externo.
+     */
+    public static HistoricoSolicitacaoEntity efetivacaoIndeterminadaRegistrada(UUID solicitacaoId, Instant ocorridoEm) {
+        return de(
+                solicitacaoId,
+                new EntradaHistorico(
+                        "INDETERMINADA:" + solicitacaoId,
+                        TipoFatoHistorico.EFETIVACAO_INDETERMINADA_REGISTRADA,
+                        AtorSistema.RECONCILIACAO_EFETIVACAO,
+                        ocorridoEm));
+    }
 }

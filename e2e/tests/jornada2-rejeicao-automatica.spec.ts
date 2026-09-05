@@ -50,7 +50,8 @@ test.describe('Jornada 2 -- rejeicao automatica', () => {
     await expect(decisao).toBeVisible();
     await expect(decisao).toHaveClass(/rejeitada/);
     await expect(decisao).not.toHaveClass(/aprovada/);
-    await expect(decisao.locator('.status-solicitacao')).toContainText('REJEITADA');
+    // #0006, AC37: o enum cru nao e mais renderizado -- apresentacaoDeStatus traduz para tom "erro".
+    await expect(decisao.locator('.status-solicitacao')).toContainText('Solicitacao rejeitada');
 
     // Mensagem exata de CONTA_NAO_ELEGIVEL -- nunca a de FORA_DA_POLITICA_AUTOMATICA nem a de
     // PERFIL_RISCO_INCOMPATIVEL, que sao motivos distintos (spec, secao "Apresentacao").

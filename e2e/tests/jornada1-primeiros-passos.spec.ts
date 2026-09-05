@@ -334,7 +334,9 @@ test.describe('Jornada 1 -- primeiros passos', () => {
     const decisao = atendimento.locator('.decisao');
     await expect(decisao).toBeVisible();
     await expect(decisao).toHaveClass(/aprovada/);
-    await expect(decisao.locator('.status-solicitacao')).toContainText('AGUARDANDO_EFETIVACAO');
+    // #0006, AC37: o enum cru nao e mais renderizado -- apresentacaoDeStatus traduz para o tom e a
+    // mensagem apropriados (mensagens.spec.ts cobre a taxonomia exaustivamente).
+    await expect(decisao.locator('.status-solicitacao')).toContainText('Aguardando confirmacao do Core');
 
     // Imediatamente apos a aprovacao: o vigente confirmado pelo Core continua sendo o ANTIGO --
     // o solicitado aparece marcado como pendente, nunca substituindo o vigente antes da

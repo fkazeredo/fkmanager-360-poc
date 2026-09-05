@@ -7,6 +7,7 @@ import com.fkmanager360.credito.application.port.out.ReclamacaoEntrega;
 import com.fkmanager360.credito.application.port.out.ResultadoConclusaoDefinitiva;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
+import com.fkmanager360.credito.application.port.out.ResultadoIndeterminacao;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEfetivacao;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEntrega;
 import com.fkmanager360.credito.application.port.out.TransacaoPort;
@@ -198,6 +199,73 @@ class RegistrarResultadoEfetivacaoTest {
         assertThat(fake.motivoFalha).isEqualTo(MotivoFalhaEfetivacao.LIMITE_VIGENTE_DIVERGENTE);
     }
 
+    // --- registrarIndeterminacao (#0006, AC16) --------------------------------------------------
+
+    @Test
+    void registrarIndeterminacao_aguardandoEfetivacao_transicionaEDevolveIndeterminadaAgora() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+
+        ResultadoIndeterminacao resultado = usecase(fake, new FakeEntregaComClaim(true))
+                .registrarIndeterminacao(EFETIVACAO_ID, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoIndeterminacao.IndeterminadaAgora.class);
+        assertThat(fake.status).isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA);
+    }
+
+    @Test
+    void registrarIndeterminacao_jaIndeterminada_naoRegistraDeNovo_devolveJaEstavaIndeterminada() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA);
+        RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
+
+        ResultadoIndeterminacao resultado = usecase.registrarIndeterminacao(EFETIVACAO_ID, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoIndeterminacao.JaEstavaIndeterminada.class);
+        assertThat(fake.status).isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA);
+    }
+
+    @Test
+    void registrarIndeterminacao_reentrada_eIdempotente_umaUnicaTransicao() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.AGUARDANDO_EFETIVACAO);
+        RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
+
+        ResultadoIndeterminacao primeira = usecase.registrarIndeterminacao(EFETIVACAO_ID, AGORA);
+        ResultadoIndeterminacao segunda = usecase.registrarIndeterminacao(EFETIVACAO_ID, AGORA.plusSeconds(1));
+
+        assertThat(primeira).isInstanceOf(ResultadoIndeterminacao.IndeterminadaAgora.class);
+        assertThat(segunda).isInstanceOf(ResultadoIndeterminacao.JaEstavaIndeterminada.class);
+        assertThat(fake.chamadasDeIndeterminacao).isEqualTo(2);
+    }
+
+    /** Conclusao tardia em FALHA autoritativa sobre EFETIVACAO_INDETERMINADA -- equivalente exigido pelo AC16. */
+    @Test
+    void executar_falhaAutoritativaSobreEfetivacaoIndeterminada_concluiComFalhaEfetivacao() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA);
+        RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
+
+        ResultadoRegistroEfetivacao resultado = usecase.executar(
+                EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.FalhaDefinitiva(MotivoFalhaEfetivacao.CONTA_INEXISTENTE),
+                Optional.empty(), AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.Concluida.class);
+        assertThat(((ResultadoRegistroEfetivacao.Concluida) resultado).statusResultante())
+                .isEqualTo(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO);
+    }
+
+    /** Conclusao tardia em sucesso sobre EFETIVACAO_INDETERMINADA -- ja provado por #0005, repetido aqui como regressao explicita do #0006. */
+    @Test
+    void executar_sucessoSobreEfetivacaoIndeterminada_concluiComEfetivada() {
+        FakeResultadoEfetivacaoPort fake = FakeResultadoEfetivacaoPort.naoTerminal(StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA);
+        RegistrarResultadoEfetivacao usecase = usecase(fake, new FakeEntregaComClaim(true));
+
+        ResultadoRegistroEfetivacao resultado = usecase.executar(
+                EFETIVACAO_ID, new ResultadoEfetivacaoRecebido.Sucesso(LIMITE_SOLICITADO_CONGELADO),
+                Optional.of(new ProtocoloCore("PRT-TARDIO")), AUTOR, AGORA);
+
+        assertThat(resultado).isInstanceOf(ResultadoRegistroEfetivacao.Concluida.class);
+        assertThat(((ResultadoRegistroEfetivacao.Concluida) resultado).statusResultante())
+                .isEqualTo(StatusSolicitacaoAumentoLimite.EFETIVADA);
+    }
+
     // --- executarSobClaim: composicao fenced ----------------------------------------------------
 
     @Test
@@ -380,6 +448,27 @@ class RegistrarResultadoEfetivacaoTest {
             status = statusResultante;
 
             return new ResultadoRegistroEfetivacao.Concluida(statusResultante, Duration.between(DECIDIDA_EM, agora));
+        }
+
+        /**
+         * #0006: mesma disciplina do metodo acima -- delega ao dominio real, idempotente sobre
+         * ja-indeterminada e ja-terminal, exatamente como {@code JpaResultadoEfetivacaoAdapter}.
+         */
+        int chamadasDeIndeterminacao = 0;
+
+        @Override
+        public ResultadoIndeterminacao registrarIndeterminacao(EfetivacaoId efetivacaoId, Instant agora) {
+            chamadasDeIndeterminacao++;
+            if (status.isTerminal()) {
+                return new ResultadoIndeterminacao.JaTerminal(status);
+            }
+            if (status == StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA) {
+                return new ResultadoIndeterminacao.JaEstavaIndeterminada();
+            }
+            status = new SolicitacaoAumentoLimite(status)
+                    .transicionarPara(StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA)
+                    .status();
+            return new ResultadoIndeterminacao.IndeterminadaAgora();
         }
     }
 

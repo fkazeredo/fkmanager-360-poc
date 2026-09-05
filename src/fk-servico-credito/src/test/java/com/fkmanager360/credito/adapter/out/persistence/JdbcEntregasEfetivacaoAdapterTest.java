@@ -251,6 +251,22 @@ class JdbcEntregasEfetivacaoAdapterTest {
         static PersistenceExceptionTranslationPostProcessor persistenceExceptionTranslationPostProcessor() {
             return new PersistenceExceptionTranslationPostProcessor();
         }
+
+        // #0006: CreditoPersistenceOperations (mesmo pacote, entra pelo ComponentScan acima) ganhou
+        // dois construtor-params @Value (janela de reconciliacao) -- os dois beans abaixo replicam,
+        // neste contexto minimo de Spring Framework puro, o que uma aplicacao Spring Boot de
+        // verdade ja da de graca via autoconfiguracao: resolucao de "${...:default}" e conversao
+        // String -> java.time.Duration. Nenhuma property e definida de proposito -- os testes
+        // exercitam os DEFAULTS de application.yml (PT60S / PT10M).
+        @Bean
+        static org.springframework.context.support.PropertySourcesPlaceholderConfigurer propertySourcesPlaceholderConfigurer() {
+            return new org.springframework.context.support.PropertySourcesPlaceholderConfigurer();
+        }
+
+        @Bean(name = "conversionService")
+        static org.springframework.core.convert.ConversionService conversionService() {
+            return new org.springframework.boot.convert.ApplicationConversionService();
+        }
     }
 
     // ---------------------------------------------------------------------------------------

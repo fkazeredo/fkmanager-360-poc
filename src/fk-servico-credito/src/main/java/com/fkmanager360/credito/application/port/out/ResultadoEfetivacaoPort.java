@@ -19,6 +19,11 @@ import java.util.Optional;
  * quem compoe esta porta com o fencing e a terminalizacao (dentro de uma {@link TransacaoPort}
  * unica) e {@code RegistrarResultadoEfetivacao#executarSobClaim}, nunca esta porta sozinha.
  *
+ * <p>{@link #registrarIndeterminacao} (#0006) e a UNICA porta de saida adicional de
+ * {@code AGUARDANDO_EFETIVACAO}: ao contrario de {@link #registrar}, nao carrega um resultado
+ * autoritativo do Core -- e a propria janela normal de recuperacao automatica esgotada (spec,
+ * secao "Reconciliacao"). Nunca produz {@code FALHA_EFETIVACAO}.
+ *
  * <p>{@code protocoloInformado} (#0005): o callback sempre o traz (todo callback pressupoe um
  * aceite previo com {@code numPrt} -- ver contrato em {@code CallbackEfetivacaoRequest}); o
  * dispatcher (#0004, via {@code executarSobClaim}) nunca o informa, porque aprender o protocolo
@@ -36,4 +41,11 @@ public interface ResultadoEfetivacaoPort {
             Optional<ProtocoloCore> protocoloInformado,
             AtorOperacao autor,
             Instant agora);
+
+    /**
+     * Transiciona {@code AGUARDANDO_EFETIVACAO -> EFETIVACAO_INDETERMINADA} quando a janela normal
+     * de recuperacao automatica se esgota sem resultado autoritativo (#0006, AC16). Idempotente:
+     * ja indeterminada ou ja terminal nao reescreve nada -- ver {@link ResultadoIndeterminacao}.
+     */
+    ResultadoIndeterminacao registrarIndeterminacao(EfetivacaoId efetivacaoId, Instant agora);
 }

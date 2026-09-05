@@ -2,6 +2,7 @@ package com.fkmanager360.credito.config;
 
 import com.fkmanager360.credito.adapter.out.persistence.CreditoPersistenceOperations;
 import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
+import com.fkmanager360.credito.application.port.out.ReconciliacaoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
@@ -57,7 +58,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "spring.flyway.enabled=false",
                 "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
                         + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration",
-                "credito.efetivacao.entrega.habilitada=false"
+                "credito.efetivacao.entrega.habilitada=false",
+                // #0006: mesmo motivo do dispatcher acima -- sem isto, o reconciliador real
+                // dispararia periodicamente contra as portas mockadas abaixo.
+                "credito.efetivacao.reconciliacao.habilitada=false"
         })
 @AutoConfigureMockMvc
 @Import(JwtDecoderTestConfig.class)
@@ -114,6 +118,10 @@ class CallbackSegurancaTest {
 
     @MockitoBean
     private ResultadoEfetivacaoPort resultadoEfetivacaoPort;
+
+    // #0006: evita que o component scan precise construir o adapter real (exige JdbcClient/DataSource).
+    @MockitoBean
+    private ReconciliacaoEfetivacaoPort reconciliacaoEfetivacaoPort;
 
     private static String corpo(String idEft, String numPrt, String codRet, String vlrLimEft) {
         return """

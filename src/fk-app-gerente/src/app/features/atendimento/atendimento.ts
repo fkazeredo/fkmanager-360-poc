@@ -17,7 +17,7 @@ import {
 import { iniciaisDe } from '../../shared/iniciais';
 import { formatarReais, parseReaisParaCentavos } from '../../shared/reais';
 import { AtendimentoService } from './atendimento-api';
-import { acaoParaErroSubmissao, mensagemDecisao, mensagemDeErro } from './mensagens';
+import { acaoParaErroSubmissao, apresentacaoDeStatus, mensagemDecisao, mensagemDeErro } from './mensagens';
 
 type ResultadoContas = { status: 'sucesso'; itens: ContaResumo[] } | { status: 'erro'; mensagem: string };
 
@@ -107,6 +107,12 @@ export class AtendimentoComponent {
   readonly mensagemDecisaoExibida = computed(() => {
     const resultado = this.resultadoSubmissao();
     return resultado === null ? '' : mensagemDecisao(resultado.decisao);
+  });
+
+  /** AC37: EFETIVACAO_INDETERMINADA (e os demais status) renderizam pelo tom desta apresentacao, nunca pelo enum cru. */
+  readonly apresentacaoDoStatus = computed(() => {
+    const resultado = this.resultadoSubmissao();
+    return resultado === null ? null : apresentacaoDeStatus(resultado.status);
   });
 
   constructor() {

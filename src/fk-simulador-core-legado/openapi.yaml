@@ -3,15 +3,17 @@ info:
   title: fk-simulador-core-legado
   description: "Sistema externo simulado (nao e um bounded context deste repositorio).\
     \ Contrato host-centrico FICTICIO desta POC (ADR-0005) -- nao e replica de nenhum\
-    \ core bancario real. Quatro capacidades: consulta em lote dos dados mestres do\
+    \ core bancario real. Cinco capacidades: consulta em lote dos dados mestres do\
     \ Cliente e consulta das contas de um Cliente, ambas consumidas pela ACL de fk-servico-carteira-clientes;\
-    \ consulta dos dados de credito de uma conta e recepcao da instrucao de efetivacao,\
-    \ ambas consumidas pela ACL de fk-servico-credito. Cada contexto integra o legado\
-    \ pela sua propria ACL, apenas na fatia que lhe diz respeito (ADR-0004). fk-bff-gerente\
-    \ nunca chama este servico diretamente (AC30). O control plane de cenarios de\
-    \ efetivacao (ADR-0018), ativo apenas nos profiles local/demo/test, e deliberadamente\
-    \ separado deste contrato funcional e nao aparece aqui."
-  version: "0004"
+    \ consulta dos dados de credito de uma conta, recepcao da instrucao de efetivacao\
+    \ e consulta do status de uma efetivacao ja aceita (por EfetivacaoId ou por protocolo,\
+    \ usada pela reconciliacao do #0006), todas consumidas pela ACL de fk-servico-credito.\
+    \ Cada contexto integra o legado pela sua propria ACL, apenas na fatia que lhe\
+    \ diz respeito (ADR-0004). fk-bff-gerente nunca chama este servico diretamente\
+    \ (AC30). O control plane de cenarios de efetivacao (ADR-0018), ativo apenas nos\
+    \ profiles local/demo/test, e deliberadamente separado deste contrato funcional\
+    \ e nao aparece aqui."
+  version: "0006"
 servers:
 - url: http://localhost:8090
   description: "Rede interna do Docker Compose (nome de servico), porta exposta localmente\
@@ -34,8 +36,7 @@ paths:
         \ o mesmo idEft com payload diferente e sempre rejeitado explicitamente (codRet\
         \ 207), nunca tratado como operacao nova. Esta operacao NAO aplica a alteracao\
         \ sincronamente -- o novo limite so passa a valer para /legado/contas/consulta-credito,\
-        \ e o callback so e disparado, apos o processamento assincrono (#0005). Consulta\
-        \ de status por protocolo/idEft pertence a #0006."
+        \ e o callback so e disparado, apos o processamento assincrono (#0005)."
       operationId: efetivarLimiteLegado
       requestBody:
         content:
@@ -68,6 +69,41 @@ paths:
             \ de cenarios (ADR-0018, perfis local/demo/test) -- sem corpo. No cenario\
             \ perder-aceite, o aceite E registrado antes do 503: o reenvio do mesmo\
             \ idEft recupera o mesmo numPrt (AC11)."
+  /legado/efetivacoes/consulta:
+    post:
+      tags:
+      - conta-legado
+      summary: Consulta de status por ProtocoloCore ou por EfetivacaoId (#0006)
+      description: "Recuperavel por qualquer um dos dois identificadores (ADR-0009,\
+        \ emenda): numPrt quando conhecido, idEft quando o aceite se perdeu. Exatamente\
+        \ um dos dois campos deve vir preenchido. Nunca reenvia nem muta nada -- so\
+        \ responde o desfecho ja conhecido."
+      operationId: consultarStatusEfetivacaoLegado
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsultaStatusEfetivacaoLegadoRequest"
+        required: true
+      responses:
+        "200":
+          description: "Processada (codRet 000, com vlrLimEft), ainda em processamento\
+            \ (codRet 301) ou desconhecida (codRet 404) -- nunca uma falha definitiva\
+            \ neste simulador, porque toda instrucao aceita eventualmente processa\
+            \ com sucesso (nenhum caminho assincrono de falha existe hoje); o contrato\
+            \ preve os codigos definitivos para completude, verificados contra WireMock\
+            \ do lado do adapter (S4)."
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ConsultaStatusEfetivacaoLegadoResponse"
+        "400":
+          description: "Nem idEft nem numPrt informados, ou os dois informados ao\
+            \ mesmo tempo."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
   /legado/contas/consulta:
     post:
       tags:
@@ -254,6 +290,43 @@ components:
         properties:
           type: object
           additionalProperties: {}
+    ConsultaStatusEfetivacaoLegadoRequest:
+      type: object
+      properties:
+        idEft:
+          type: string
+          description: EfetivacaoId por extenso (UUID). Usado quando numPrt nao e
+            conhecido.
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        numPrt:
+          type: string
+          description: "ProtocoloCore, 12 digitos com zero-padding. Usado quando ja\
+            \ conhecido."
+          example: "000000000001"
+    ConsultaStatusEfetivacaoLegadoResponse:
+      type: object
+      properties:
+        codRet:
+          type: string
+          description: "\"000\" processada; \"301\" aceita, ainda em processamento;\
+            \ \"404\" efetivacao desconhecida (nenhum aceite com este identificador)."
+          example: "000"
+        msgRet:
+          type: string
+        idEft:
+          type: string
+          description: "Ecoado quando a consulta foi por idEft, ou resolvido a partir\
+            \ do numPrt."
+        numPrt:
+          type: string
+          description: "Ecoado quando a consulta foi por numPrt, ou resolvido a partir\
+            \ do idEft."
+        vlrLimEft:
+          type: string
+          description: LimiteEfetivado. Presente somente quando codRet="000".
+      required:
+      - codRet
+      - msgRet
     ContasLegadoQueryRequest:
       type: object
       properties:

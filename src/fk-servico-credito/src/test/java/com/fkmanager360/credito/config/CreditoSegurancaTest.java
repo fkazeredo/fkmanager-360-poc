@@ -2,6 +2,7 @@ package com.fkmanager360.credito.config;
 
 import com.fkmanager360.credito.adapter.out.persistence.CreditoPersistenceOperations;
 import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
+import com.fkmanager360.credito.application.port.out.ReconciliacaoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.SolicitacoesAumentoLimitePort;
@@ -77,7 +78,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 // #0004: sem isto, o dispatcher real dispararia a cada ~1s contra as portas
                 // mockadas abaixo (que devolveriam null sem stub), sem nenhum ganho para um teste
                 // que nao exercita entrega.
-                "credito.efetivacao.entrega.habilitada=false"
+                "credito.efetivacao.entrega.habilitada=false",
+                "credito.efetivacao.reconciliacao.habilitada=false"
         })
 @AutoConfigureMockMvc
 @Import(JwtDecoderTestConfig.class)
@@ -148,6 +150,10 @@ class CreditoSegurancaTest {
 
     @MockitoBean
     private ResultadoEfetivacaoPort resultadoEfetivacaoPort;
+
+    // #0006: mesma razao das portas acima.
+    @MockitoBean
+    private ReconciliacaoEfetivacaoPort reconciliacaoEfetivacaoPort;
 
     @BeforeEach
     void comportamentoPadraoDasDependencias() {

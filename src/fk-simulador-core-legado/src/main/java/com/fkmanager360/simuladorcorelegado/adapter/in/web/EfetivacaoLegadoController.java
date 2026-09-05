@@ -6,6 +6,7 @@ import com.fkmanager360.simuladorcorelegado.domain.ContasLegadoStore;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.DecisaoDeTransporte;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.RegistroEfetivacao;
+import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.ResultadoConsultaStatus;
 import com.fkmanager360.simuladorcorelegado.domain.EfetivacoesLegadoStore.ResultadoRegistroAceite;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,7 +31,10 @@ import java.util.Optional;
  * devolucao de {@code numPrt}. A alteracao de fato em {@link ContasLegadoStore} e o disparo do
  * callback de confirmacao acontecem de forma ASSINCRONA, apos um atraso curto, via
  * {@link ProcessadorEfetivacaoLegado} -- nunca sincronamente dentro desta chamada, porque o
- * aceite nao e conclusao (spec). Consulta de status por protocolo/idEft pertence a #0006.
+ * aceite nao e conclusao (spec).
+ *
+ * <p>Consulta de status por protocolo/idEft ({@link #consultarStatus}, #0006) nasce aqui, porque
+ * este e o primeiro comportamento que a consome (o reconciliador de {@code servico-credito}).
  *
  * <p>Sem autenticacao, pela mesma decisao consciente registrada em {@code ClienteLegadoController}.
  */
@@ -52,7 +56,7 @@ public class EfetivacaoLegadoController {
                     + "diferente e sempre rejeitado explicitamente (codRet 207), nunca tratado como operacao "
                     + "nova. Esta operacao NAO aplica a alteracao sincronamente -- o novo limite so passa a "
                     + "valer para /legado/contas/consulta-credito, e o callback so e disparado, apos o "
-                    + "processamento assincrono (#0005). Consulta de status por protocolo/idEft pertence a #0006.")
+                    + "processamento assincrono (#0005).")
     @ApiResponses({
             @ApiResponse(responseCode = "200",
                     description = "Requisicao processada -- aceite, uma das quatro classes de falha "
@@ -118,6 +122,53 @@ public class EfetivacaoLegadoController {
 
         RegistroEfetivacao novo = registrarAceiteEAgendarProcessamento(requisicao);
         return ResponseEntity.ok(EfetivacaoLegadoResponse.aceite(requisicao, novo.numPrt()));
+    }
+
+    @Operation(
+            operationId = "consultarStatusEfetivacaoLegado",
+            summary = "Consulta de status por ProtocoloCore ou por EfetivacaoId (#0006)",
+            description = "Recuperavel por qualquer um dos dois identificadores (ADR-0009, emenda): numPrt "
+                    + "quando conhecido, idEft quando o aceite se perdeu. Exatamente um dos dois campos deve "
+                    + "vir preenchido. Nunca reenvia nem muta nada -- so responde o desfecho ja conhecido.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200",
+                    description = "Processada (codRet 000, com vlrLimEft), ainda em processamento (codRet 301) "
+                            + "ou desconhecida (codRet 404) -- nunca uma falha definitiva neste simulador, "
+                            + "porque toda instrucao aceita eventualmente processa com sucesso (nenhum caminho "
+                            + "assincrono de falha existe hoje); o contrato preve os codigos definitivos para "
+                            + "completude, verificados contra WireMock do lado do adapter (S4).",
+                    content = @Content(schema = @Schema(implementation = ConsultaStatusEfetivacaoLegadoResponse.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "Nem idEft nem numPrt informados, ou os dois informados ao mesmo tempo.",
+                    content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class))),
+    })
+    @PostMapping(path = "/legado/efetivacoes/consulta")
+    public ResponseEntity<ConsultaStatusEfetivacaoLegadoResponse> consultarStatus(
+            @RequestBody ConsultaStatusEfetivacaoLegadoRequest requisicao) {
+        boolean temIdEft = !emBranco(requisicao.idEft());
+        boolean temNumPrt = !emBranco(requisicao.numPrt());
+        if (temIdEft == temNumPrt) {
+            // Os dois ausentes OU os dois presentes: nenhuma das duas e uma consulta valida --
+            // exatamente um identificador por chamada.
+            return ResponseEntity.badRequest().build();
+        }
+
+        ResultadoConsultaStatus resultado = temIdEft
+                ? store.consultarPorIdEft(requisicao.idEft())
+                : store.consultarPorNumPrt(requisicao.numPrt());
+
+        return ResponseEntity.ok(switch (resultado) {
+            case ResultadoConsultaStatus.Processada processada -> ConsultaStatusEfetivacaoLegadoResponse.processada(
+                    processada.idEft(), processada.numPrt(), processada.vlrLimEft());
+            case ResultadoConsultaStatus.EmProcessamento emProcessamento -> ConsultaStatusEfetivacaoLegadoResponse.emProcessamento(
+                    emProcessamento.idEft(), emProcessamento.numPrt());
+            case ResultadoConsultaStatus.Desconhecida ignored -> ConsultaStatusEfetivacaoLegadoResponse.desconhecida(
+                    requisicao.idEft(), requisicao.numPrt());
+        });
+    }
+
+    private static boolean emBranco(String valor) {
+        return valor == null || valor.isBlank();
     }
 
     /**

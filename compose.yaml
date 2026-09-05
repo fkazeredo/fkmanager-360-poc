@@ -57,6 +57,12 @@ services:
       AUTH_SERVER_SIMULADOR_CLIENT_ID: ${AUTH_SERVER_SIMULADOR_CLIENT_ID}
       AUTH_SERVER_SIMULADOR_CLIENT_SECRET: ${AUTH_SERVER_SIMULADOR_CLIENT_SECRET}
       CREDITO_CALLBACK_URL: http://servico-credito:8083/callbacks/efetivacoes
+    ports:
+      # #0006: as jornadas 3 e 4 do Playwright armam cenarios de callback suprimido/suspenso
+      # (suprimir-callback, suspender-processamento, liberar) diretamente contra o control plane --
+      # loopback apenas, e so porque o control plane ja e exclusivo dos profiles local/demo/test
+      # (ADR-0018), nunca exposto assim em producao real.
+      - "127.0.0.1:8090:8090"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/actuator/health"]
       interval: 5s
@@ -141,6 +147,13 @@ services:
       AUTH_SERVER_ISSUER_URI: http://servidor-autorizacao:9000
       AUTH_SERVER_CREDITO_CLIENT_ID: ${AUTH_SERVER_CREDITO_CLIENT_ID}
       AUTH_SERVER_CREDITO_CLIENT_SECRET: ${AUTH_SERVER_CREDITO_CLIENT_SECRET}
+      # #0006: prazos do reconciliador reduzidos para escala de demonstracao/E2E (segundos, nunca
+      # minutos reais) -- mesma semantica da spec, so a escala temporal muda. Jornada 3 fecha em
+      # poucos segundos apos a decisao; jornada 4 atinge EFETIVACAO_INDETERMINADA em ~10s.
+      CREDITO_RECONCILIACAO_ELEGIVEL_APOS: PT3S
+      CREDITO_RECONCILIACAO_POLL_INTERVAL: PT1S
+      CREDITO_RECONCILIACAO_JANELA: PT10S
+      CREDITO_RECONCILIACAO_BACKOFF_LONGO: PT3S
     depends_on:
       postgres:
         condition: service_healthy

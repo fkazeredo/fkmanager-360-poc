@@ -281,3 +281,20 @@
   color: var(--tinta-500);
   font-variant-numeric: tabular-nums;
 }
+
+/* AC37: EFETIVACAO_INDETERMINADA usa o mesmo tom amber de "pendente" -- acompanhamento, nunca a
+   cor de erro. Distinto de .aviso-erro (caixa de alerta completa): aqui e so o texto do status. */
+.status-tom-acompanhamento {
+  color: var(--atencao-700);
+  font-weight: 600;
+}
+
+.status-tom-sucesso {
+  color: var(--sucesso-700);
+  font-weight: 600;
+}
+
+.status-tom-erro {
+  color: var(--erro-700);
+  font-weight: 600;
+}

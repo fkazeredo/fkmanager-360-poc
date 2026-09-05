@@ -1,4 +1,10 @@
-import { acaoParaErroSubmissao, mensagemDecisao, mensagemDeErro, mensagemDeErroSubmissao } from './mensagens';
+import {
+  acaoParaErroSubmissao,
+  apresentacaoDeStatus,
+  mensagemDecisao,
+  mensagemDeErro,
+  mensagemDeErroSubmissao,
+} from './mensagens';
 
 /**
  * A tabela exaustiva da taxonomia de erro da submissao, testada pura (sem TestBed): cada par
@@ -76,5 +82,43 @@ describe('mensagemDecisao', () => {
   it('CONTA_NAO_ELEGIVEL e PERFIL_RISCO_INCOMPATIVEL nunca expoem classificacao bruta (AC3)', () => {
     expect(mensagemDecisao(decisao('REJEITADA', 'CONTA_NAO_ELEGIVEL'))).toContain('nao esta elegivel');
     expect(mensagemDecisao(decisao('REJEITADA', 'PERFIL_RISCO_INCOMPATIVEL'))).not.toMatch(/BAIXO|MEDIO|ALTO/);
+  });
+});
+
+describe('apresentacaoDeStatus (#0006, AC37)', () => {
+  it('EFETIVACAO_INDETERMINADA e tom acompanhamento, nunca erro', () => {
+    const apresentacao = apresentacaoDeStatus('EFETIVACAO_INDETERMINADA');
+    expect(apresentacao.tom).toBe('acompanhamento');
+    expect(apresentacao.tom).not.toBe('erro');
+  });
+
+  it('EFETIVACAO_INDETERMINADA avisa que uma nova solicitacao para a conta nao pode ser iniciada', () => {
+    expect(apresentacaoDeStatus('EFETIVACAO_INDETERMINADA').mensagem).toContain(
+      'nova solicitacao para esta conta nao pode ser iniciada',
+    );
+  });
+
+  it('EFETIVACAO_INDETERMINADA nao afirma que efetivou nem que falhou', () => {
+    const mensagem = apresentacaoDeStatus('EFETIVACAO_INDETERMINADA').mensagem;
+    expect(mensagem).not.toMatch(/falhou|falha/i);
+    expect(mensagem).not.toMatch(/efetivada com sucesso|foi efetivad/i);
+  });
+
+  it('EFETIVADA e tom sucesso', () => {
+    expect(apresentacaoDeStatus('EFETIVADA').tom).toBe('sucesso');
+  });
+
+  it.each(['FALHA_EFETIVACAO', 'REJEITADA'])('%s e tom erro', (status) => {
+    expect(apresentacaoDeStatus(status).tom).toBe('erro');
+  });
+
+  it('AGUARDANDO_EFETIVACAO e tom acompanhamento, como EFETIVACAO_INDETERMINADA', () => {
+    expect(apresentacaoDeStatus('AGUARDANDO_EFETIVACAO').tom).toBe('acompanhamento');
+  });
+
+  it('status desconhecido nunca lanca -- cai no tom neutro com o proprio valor como mensagem', () => {
+    const apresentacao = apresentacaoDeStatus('UM_STATUS_QUE_NAO_EXISTE_AINDA');
+    expect(apresentacao.tom).toBe('neutro');
+    expect(apresentacao.mensagem).toBe('UM_STATUS_QUE_NAO_EXISTE_AINDA');
   });
 });

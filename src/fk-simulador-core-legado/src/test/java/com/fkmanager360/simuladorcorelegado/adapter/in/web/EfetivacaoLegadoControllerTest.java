@@ -117,4 +117,42 @@ class EfetivacaoLegadoControllerTest {
                         {"idEft":"%s","numCta":"%s","vlrLimChqEspEsp":"%s","vlrLimNov":"%s","idCor":"%s"}
                         """.formatted(idEft, numCta, vlrLimChqEspEsp, vlrLimNov, idCor));
     }
+
+    // --- Consulta de status (#0006) ---------------------------------------------------------
+
+    private static final String PATH_CONSULTA = "/legado/efetivacoes/consulta";
+
+    @Test
+    void consultarStatus_idEftDesconhecido_devolve404Ficticio() throws Exception {
+        mockMvc.perform(post(PATH_CONSULTA).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idEft\":\"id-nunca-existiu\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.codRet").value("404"));
+    }
+
+    @Test
+    void consultarStatus_nemIdEftNemNumPrt_e400() throws Exception {
+        mockMvc.perform(post(PATH_CONSULTA).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void consultarStatus_idEftENumPrtAoMesmoTempo_e400() throws Exception {
+        mockMvc.perform(post(PATH_CONSULTA).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idEft\":\"x\",\"numPrt\":\"000000000001\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void consultarStatus_porIdEft_aceitoMasNaoProcessado_devolve301() throws Exception {
+        String idEft = "id-eft-consulta-1";
+        mockMvc.perform(efetivar(idEft, NUM_CTA_REGULAR, "000000000500000", "000000000600000", "id-cor-consulta-1"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post(PATH_CONSULTA).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idEft\":\"" + idEft + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.codRet").value("301"))
+                .andExpect(jsonPath("$.numPrt").exists());
+    }
 }
