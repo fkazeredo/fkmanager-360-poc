@@ -21,13 +21,14 @@ import com.fkmanager360.credito.domain.SolicitacaoId;
 import com.fkmanager360.credito.domain.StatusSolicitacaoAumentoLimite;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.util.UUID;
 
 /**
@@ -72,7 +73,6 @@ import java.util.UUID;
  * nao sendo um "repositorio" no sentido DDD, e essa a razao funcional real da anotacao em Spring.
  */
 @Repository
-@RequiredArgsConstructor
 public class CreditoPersistenceOperations {
 
     @PersistenceContext
@@ -83,6 +83,41 @@ public class CreditoPersistenceOperations {
     private final DecisaoCreditoRepository decisaoRepository;
     private final OutboxMensagemRepository outboxRepository;
     private final HistoricoSolicitacaoRepository historicoRepository;
+    private final Duration reconciliacaoElegivelApos;
+    private final Duration reconciliacaoJanela;
+
+    /**
+     * Construtor explicito, nao {@code @RequiredArgsConstructor}: {@code lombok.config} deste
+     * modulo so lista {@code @Qualifier} em {@code copyableAnnotations} (nao {@code @Value}) --
+     * mesma convencao de {@code DispatcherEfetivacaoScheduler}, que mistura beans e propriedades
+     * via construtor explicito quando um {@code @Value} precisa chegar a um campo.
+     */
+    public CreditoPersistenceOperations(
+            JdbcClient jdbcClient,
+            SolicitacaoAumentoLimiteRepository solicitacaoRepository,
+            DecisaoCreditoRepository decisaoRepository,
+            OutboxMensagemRepository outboxRepository,
+            HistoricoSolicitacaoRepository historicoRepository,
+            @Value("${credito.efetivacao.reconciliacao.elegivel-apos:PT60S}") Duration reconciliacaoElegivelApos,
+            @Value("${credito.efetivacao.reconciliacao.janela:PT10M}") Duration reconciliacaoJanela) {
+        // Falha rapido na inicializacao (mesmo idioma de PoliticaRetryEntrega): a agenda gravada
+        // abaixo em aplicarDecisaoTx2 pressupoe elegivel-apos < janela por construcao. Sem esta
+        // checagem, uma config invertida faria toda solicitacao aprovada nascer com a janela ja
+        // esgotada, convergindo direto para EFETIVACAO_INDETERMINADA sem nenhuma tentativa real de
+        // reconciliacao -- silenciosamente, sem sinal algum no boot.
+        if (!reconciliacaoElegivelApos.minus(reconciliacaoJanela).isNegative()) {
+            throw new IllegalArgumentException(
+                    "credito.efetivacao.reconciliacao.elegivel-apos (%s) deve ser menor que .janela (%s)"
+                            .formatted(reconciliacaoElegivelApos, reconciliacaoJanela));
+        }
+        this.jdbcClient = jdbcClient;
+        this.solicitacaoRepository = solicitacaoRepository;
+        this.decisaoRepository = decisaoRepository;
+        this.outboxRepository = outboxRepository;
+        this.historicoRepository = historicoRepository;
+        this.reconciliacaoElegivelApos = reconciliacaoElegivelApos;
+        this.reconciliacaoJanela = reconciliacaoJanela;
+    }
 
     /**
      * TX1 (plano #0003, Fase 1). As quatro escritas rodam NA ORDEM -- {@code solicitacao} ->
@@ -172,6 +207,22 @@ public class CreditoPersistenceOperations {
                     values (:messageId, 'PENDENTE', 0, :agora, :agora)
                     """)
                     .param("messageId", intencaoOuNull.messageId())
+                    .param("agora", Timestamp.from(decisao.decididaEm()))
+                    .update();
+
+            // #0006: a agenda de reconciliacao nasce atomicamente com a intencao, no MESMO commit
+            // de TX2 -- simetrico a outbox_entrega. proxima_consulta_em/janela_expira_em derivam do
+            // instante da PROPRIA decisao (nunca "agora" de um caller futuro): elegivel-apos <
+            // janela por construcao (validado na config), entao proxima_consulta_em <
+            // janela_expira_em desde a criacao.
+            jdbcClient.sql("""
+                    insert into reconciliacao_efetivacao
+                        (efetivacao_id, status_reconciliacao, tentativas, proxima_consulta_em, janela_expira_em, atualizado_em)
+                    values (:efetivacaoId, 'PENDENTE', 0, :proximaConsultaEm, :janelaExpiraEm, :agora)
+                    """)
+                    .param("efetivacaoId", intencaoOuNull.efetivacaoId().valor())
+                    .param("proximaConsultaEm", Timestamp.from(decisao.decididaEm().plus(reconciliacaoElegivelApos)))
+                    .param("janelaExpiraEm", Timestamp.from(decisao.decididaEm().plus(reconciliacaoJanela)))
                     .param("agora", Timestamp.from(decisao.decididaEm()))
                     .update();
         }

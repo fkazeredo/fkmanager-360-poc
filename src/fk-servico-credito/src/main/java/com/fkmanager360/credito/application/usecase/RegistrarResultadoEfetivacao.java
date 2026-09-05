@@ -5,6 +5,7 @@ import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.ResultadoConclusaoDefinitiva;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
+import com.fkmanager360.credito.application.port.out.ResultadoIndeterminacao;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEfetivacao;
 import com.fkmanager360.credito.application.port.out.TransacaoPort;
 import com.fkmanager360.credito.domain.AtorOperacao;
@@ -20,8 +21,9 @@ import java.util.Optional;
  * definitiva ja no aceite precisa concluir a solicitacao. Esse caso de uso e unico: #0005 e #0006
  * acrescentam entradas para ele, nunca uma segunda implementacao da regra de conclusao." A entrada
  * do dispatcher e {@link #executarSobClaim}; o callback de #0005 entra por {@link #executar};
- * #0006 (reconciliacao) tambem por {@link #executar} -- nenhuma delas duplica
- * {@link ResultadoEfetivacaoPort}.
+ * a reconciliacao de #0006 tambem entra por {@link #executar} quando o Core responde de forma
+ * autoritativa, e por {@link #registrarIndeterminacao} quando a janela normal se esgota sem
+ * resposta -- nenhuma delas duplica {@link ResultadoEfetivacaoPort}.
  *
  * <p><b>{@link #executarSobClaim} e a composicao fenced</b> (revisao do Owner, 2026-09-04): dentro
  * de uma unica {@link TransacaoPort}, verifica o claim ({@code SELECT ... FOR UPDATE} no adapter),
@@ -65,6 +67,21 @@ public class RegistrarResultadoEfetivacao {
         Objects.requireNonNull(autor, "autor e obrigatorio");
         Objects.requireNonNull(agora, "agora e obrigatorio");
         return resultadoEfetivacao.registrar(efetivacaoId, resultado, protocoloInformado, autor, agora);
+    }
+
+    /**
+     * Janela normal de recuperacao automatica esgotada sem resultado autoritativo (#0006, AC16):
+     * a UNICA saida NAO autoritativa de {@code AGUARDANDO_EFETIVACAO} -- nunca produz
+     * {@code FALHA_EFETIVACAO}. Chamada de DENTRO da mesma {@link TransacaoPort} que o
+     * reconciliador ja abriu para a convergencia do ciclo (fencing + consulta ja resolvida fora da
+     * TX + esta transicao + bookkeeping da propria reconciliacao), nunca standalone -- e essa
+     * unidade unica que garante que a transicao de negocio e o reagendamento nunca ficam em
+     * commits independentes (guardrail normativo do Owner, #0006).
+     */
+    public ResultadoIndeterminacao registrarIndeterminacao(EfetivacaoId efetivacaoId, Instant agora) {
+        Objects.requireNonNull(efetivacaoId, "efetivacaoId e obrigatorio");
+        Objects.requireNonNull(agora, "agora e obrigatorio");
+        return resultadoEfetivacao.registrarIndeterminacao(efetivacaoId, agora);
     }
 
     /**

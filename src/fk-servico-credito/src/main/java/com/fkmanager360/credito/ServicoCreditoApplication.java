@@ -1,10 +1,13 @@
 package com.fkmanager360.credito;
 
 import com.fkmanager360.credito.application.PoliticaRetryEntrega;
+import com.fkmanager360.credito.application.port.out.AlertaOperacionalPort;
+import com.fkmanager360.credito.application.port.out.ConsultaStatusEfetivacaoCorePort;
 import com.fkmanager360.credito.application.port.out.DadosCreditoCorePort;
 import com.fkmanager360.credito.application.port.out.DireitoDeAtendimentoPort;
 import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.InstrucaoEfetivacaoCorePort;
+import com.fkmanager360.credito.application.port.out.ReconciliacaoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
 import com.fkmanager360.credito.application.port.out.SolicitacoesAumentoLimitePort;
 import com.fkmanager360.credito.application.port.out.TransacaoPort;
@@ -12,11 +15,13 @@ import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.usecase.ConsultarLimiteChequeEspecialVigente;
 import com.fkmanager360.credito.application.usecase.DecidirSolicitacaoAumentoLimite;
 import com.fkmanager360.credito.application.usecase.EntregarInstrucoesEfetivacao;
+import com.fkmanager360.credito.application.usecase.ReconciliarEfetivacoes;
 import com.fkmanager360.credito.application.usecase.RegistrarResultadoEfetivacao;
 import com.fkmanager360.credito.application.usecase.RegistrarSolicitacaoAumentoLimite;
 import com.fkmanager360.credito.domain.MotorDecisaoCredito;
 import com.fkmanager360.credito.domain.PoliticaCreditoV1;
 import com.fkmanager360.credito.domain.VersaoPoliticaCredito;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -132,5 +137,43 @@ public class ServicoCreditoApplication {
             EntregasEfetivacaoPort entregasEfetivacaoPort,
             TransacaoPort transacaoPort) {
         return new RegistrarResultadoEfetivacao(resultadoEfetivacaoPort, entregasEfetivacaoPort, transacaoPort);
+    }
+
+    /**
+     * Backoff exponencial com jitter da FASE NORMAL da reconciliacao (#0006, spec, secao
+     * "Reconciliacao"): bean distinto de {@link #politicaRetryEntrega} -- mesma classe, config
+     * propria, porque as duas politicas regem fases diferentes (entrega finita com
+     * max-tentativas vs. reconciliacao limitada pela JANELA, nunca por contagem de tentativas). A
+     * fase pos-indeterminacao usa {@code backoff-longo}, um valor fixo, nao esta politica.
+     */
+    @Bean
+    PoliticaRetryEntrega politicaRetryConsultaReconciliacao(
+            @Value("${credito.efetivacao.reconciliacao.backoff-base:PT30S}") Duration backoffBase,
+            @Value("${credito.efetivacao.reconciliacao.backoff-teto:PT2M}") Duration backoffTeto,
+            @Value("${credito.efetivacao.reconciliacao.jitter-fator:0.2}") double jitterFator) {
+        return new PoliticaRetryEntrega(backoffBase, backoffTeto, jitterFator, new Random());
+    }
+
+    /**
+     * O reconciliador de efetivacao (spec, secao "Reconciliacao"; ADR-0009, emenda; #0006): fronteira
+     * estrita com o dispatcher -- pergunta, nunca reenvia. Converge em
+     * {@link RegistrarResultadoEfetivacao#executar} (resultado autoritativo) e
+     * {@link RegistrarResultadoEfetivacao#registrarIndeterminacao} (janela esgotada) -- nenhuma
+     * segunda implementacao da regra de conclusao.
+     */
+    @Bean
+    ReconciliarEfetivacoes reconciliarEfetivacoes(
+            ReconciliacaoEfetivacaoPort reconciliacaoEfetivacaoPort,
+            ConsultaStatusEfetivacaoCorePort consultaStatusEfetivacaoCorePort,
+            RegistrarResultadoEfetivacao registrarResultadoEfetivacao,
+            AlertaOperacionalPort alertaOperacionalPort,
+            TransacaoPort transacaoPort,
+            @Qualifier("politicaRetryConsultaReconciliacao") PoliticaRetryEntrega politicaRetryConsultaReconciliacao,
+            Clock clock,
+            @Value("${credito.efetivacao.reconciliacao.lease:PT30S}") Duration lease,
+            @Value("${credito.efetivacao.reconciliacao.backoff-longo:PT5M}") Duration backoffLongo) {
+        return new ReconciliarEfetivacoes(
+                reconciliacaoEfetivacaoPort, consultaStatusEfetivacaoCorePort, registrarResultadoEfetivacao,
+                alertaOperacionalPort, transacaoPort, politicaRetryConsultaReconciliacao, clock, lease, backoffLongo);
     }
 }

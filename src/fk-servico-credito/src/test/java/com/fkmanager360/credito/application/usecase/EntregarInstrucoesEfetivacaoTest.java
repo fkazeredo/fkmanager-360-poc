@@ -9,6 +9,7 @@ import com.fkmanager360.credito.application.port.out.IntencaoEfetivacao;
 import com.fkmanager360.credito.application.port.out.ReclamacaoEntrega;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
+import com.fkmanager360.credito.application.port.out.ResultadoIndeterminacao;
 import com.fkmanager360.credito.application.port.out.ResultadoInstrucaoCore;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEfetivacao;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEntrega;
@@ -361,6 +362,12 @@ class EntregarInstrucoesEfetivacaoTest {
                 motivoFalhaConcluido = falhaDefinitiva.motivo();
             }
             return new ResultadoRegistroEfetivacao.Concluida(StatusSolicitacaoAumentoLimite.FALHA_EFETIVACAO, Duration.ofMinutes(5));
+        }
+
+        /** Nao usado neste teste: nenhum cenario aqui exercita a janela de reconciliacao (ver {@code RegistrarResultadoEfetivacaoTest}). */
+        @Override
+        public ResultadoIndeterminacao registrarIndeterminacao(EfetivacaoId efetivacaoId, Instant agora) {
+            throw new UnsupportedOperationException("nao usado neste teste");
         }
 
         private boolean fencingValido(EntregaEfetivacaoReclamada claim) {

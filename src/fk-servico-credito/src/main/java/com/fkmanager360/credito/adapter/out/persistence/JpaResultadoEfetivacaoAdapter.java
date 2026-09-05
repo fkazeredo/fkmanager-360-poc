@@ -8,6 +8,7 @@ import com.fkmanager360.credito.adapter.out.persistence.repository.HistoricoSoli
 import com.fkmanager360.credito.adapter.out.persistence.repository.SolicitacaoAumentoLimiteRepository;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.ResultadoEfetivacaoRecebido;
+import com.fkmanager360.credito.application.port.out.ResultadoIndeterminacao;
 import com.fkmanager360.credito.application.port.out.ResultadoRegistroEfetivacao;
 import com.fkmanager360.credito.application.port.out.SolicitacaoNaoEncontradaException;
 import com.fkmanager360.credito.domain.AtorOperacao;
@@ -141,6 +142,38 @@ public class JpaResultadoEfetivacaoAdapter implements ResultadoEfetivacaoPort {
         return coerente
                 ? new ResultadoRegistroEfetivacao.JaTerminalIdentica(statusPersistido)
                 : new ResultadoRegistroEfetivacao.JaTerminalContraditoria(statusPersistido);
+    }
+
+    /**
+     * #0006, AC16: correlaciona por {@code EfetivacaoId} sob o MESMO lock pessimista de
+     * {@link #registrar} -- serializa contra qualquer callback/reconciliacao concorrente para a
+     * MESMA solicitacao, exatamente pela mesma razao. So transiciona quando o status persistido
+     * ainda e {@code AGUARDANDO_EFETIVACAO}; {@code EFETIVACAO_INDETERMINADA} ou terminal e
+     * no-op idempotente -- a chamada NUNCA lanca nem reescreve.
+     */
+    @Override
+    @Transactional
+    public ResultadoIndeterminacao registrarIndeterminacao(EfetivacaoId efetivacaoId, Instant agora) {
+        SolicitacaoAumentoLimiteEntity entity = solicitacaoRepository.buscarPorEfetivacaoIdParaAtualizar(efetivacaoId.valor())
+                .orElseThrow(() -> new SolicitacaoNaoEncontradaException(
+                        "Nenhuma SolicitacaoAumentoLimite para EfetivacaoId " + efetivacaoId.valor()));
+
+        StatusSolicitacaoAumentoLimite statusAtual = StatusSolicitacaoAumentoLimite.valueOf(entity.getStatus());
+
+        if (statusAtual.isTerminal()) {
+            return new ResultadoIndeterminacao.JaTerminal(statusAtual);
+        }
+        if (statusAtual == StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA) {
+            return new ResultadoIndeterminacao.JaEstavaIndeterminada();
+        }
+
+        SolicitacaoAumentoLimite transicionada = new SolicitacaoAumentoLimite(statusAtual)
+                .transicionarPara(StatusSolicitacaoAumentoLimite.EFETIVACAO_INDETERMINADA);
+        solicitacaoRepository.atualizarStatus(entity.getId(), transicionada.status().name(), agora);
+        historicoRepository.saveAndFlush(
+                HistoricoSolicitacaoEntity.efetivacaoIndeterminadaRegistrada(entity.getId(), agora));
+
+        return new ResultadoIndeterminacao.IndeterminadaAgora();
     }
 
     private boolean resultadoCoerenteComTerminal(

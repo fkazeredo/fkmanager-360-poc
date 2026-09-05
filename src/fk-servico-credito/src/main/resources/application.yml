@@ -77,6 +77,28 @@ credito:
         # como FalhaTransitoria e queimaria tentativas do orcamento de retry por nada.
         connect-timeout: PT2S
         read-timeout: PT5S
+    # Reconciliador (#0006; ADR-0009, emenda): callback nao e infalivel -- o reconciliador PERGUNTA
+    # (nunca reenvia). Defaults de demonstracao da spec: elegivel apos ~60s em
+    # AGUARDANDO_EFETIVACAO, varredura a cada ~30s, ~10min de janela normal. Esgotada a janela sem
+    # resultado autoritativo, a solicitacao entra em EFETIVACAO_INDETERMINADA e a partir dai usa
+    # backoff-longo -- polling de recuperacao de baixa frequencia ate uma resposta autoritativa,
+    # deliberado (nao um erro de configuracao). Nao ha profile "test" neste modulo (testes JVM
+    # reduzem prazos via propriedade por teste); demo/e2e reduzem via as variaveis de ambiente
+    # abaixo, sobrescritas em compose.yaml -- mesmo idioma de SIMULADOR_CALLBACK_ATRASO no simulador.
+    reconciliacao:
+      habilitada: true
+      poll-interval: ${CREDITO_RECONCILIACAO_POLL_INTERVAL:PT30S}
+      elegivel-apos: ${CREDITO_RECONCILIACAO_ELEGIVEL_APOS:PT60S}
+      janela: ${CREDITO_RECONCILIACAO_JANELA:PT10M}
+      lote: 10
+      lease: PT30S
+      backoff-base: PT2S
+      backoff-teto: PT10S
+      jitter-fator: 0.2
+      backoff-longo: ${CREDITO_RECONCILIACAO_BACKOFF_LONGO:PT5M}
+      core:
+        connect-timeout: PT2S
+        read-timeout: PT5S
   carteira-clientes:
     base-url: ${CARTEIRA_CLIENTES_BASE_URL}
     connect-timeout: PT2S

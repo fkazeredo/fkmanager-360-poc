@@ -97,3 +97,49 @@ export function acaoParaErroSubmissao(status: number, codigo: string | undefined
   }
   return { tipo: 'manterChave', mensagem: mensagemDeErroSubmissao(status, codigo) };
 }
+
+/**
+ * O tom de apresentacao de um status de SolicitacaoAumentoLimite (#0006, AC37): "acompanhamento"
+ * nunca e "erro" -- e o que fecha o criterio "EFETIVACAO_INDETERMINADA renderiza como
+ * acompanhamento, nunca como erro" para todo o slice.
+ */
+export type TomStatusSolicitacao = 'acompanhamento' | 'sucesso' | 'erro' | 'neutro';
+
+export interface ApresentacaoStatusSolicitacao {
+  tom: TomStatusSolicitacao;
+  mensagem: string;
+}
+
+/**
+ * Mapeamento de {@code StatusSolicitacaoAumentoLimite} para apresentacao (spec, secao
+ * "Apresentacao"; #0006, AC37). `EFETIVACAO_INDETERMINADA` e o caso normativo: nao afirma que a
+ * efetivacao aconteceu nem que falhou, comunica que a solicitacao segue em acompanhamento pelo
+ * sistema, e avisa que uma nova solicitacao para esta conta nao pode ser iniciada enquanto isso --
+ * as tres afirmacoes que a spec exige, e nenhuma outra. `status` e `string` (nao uma uniao
+ * literal) porque e assim que a API o devolve hoje; o `default` cobre qualquer valor futuro sem
+ * quebrar a exaustividade que o TypeScript poderia oferecer sobre um enum.
+ */
+export function apresentacaoDeStatus(status: string): ApresentacaoStatusSolicitacao {
+  switch (status) {
+    case 'EFETIVACAO_INDETERMINADA':
+      return {
+        tom: 'acompanhamento',
+        mensagem:
+          'O resultado desta efetivacao ainda nao pode ser confirmado. A solicitacao segue em ' +
+          'acompanhamento pelo sistema, e uma nova solicitacao para esta conta nao pode ser ' +
+          'iniciada enquanto isso.',
+      };
+    case 'AGUARDANDO_EFETIVACAO':
+      return { tom: 'acompanhamento', mensagem: 'Aguardando confirmacao do Core.' };
+    case 'EFETIVADA':
+      return { tom: 'sucesso', mensagem: 'Efetivada: o novo limite ja e o vigente reconhecido pelo Core.' };
+    case 'FALHA_EFETIVACAO':
+      return { tom: 'erro', mensagem: 'Nao foi possivel concluir esta efetivacao.' };
+    case 'REJEITADA':
+      return { tom: 'erro', mensagem: 'Solicitacao rejeitada.' };
+    case 'SOLICITADA':
+      return { tom: 'neutro', mensagem: 'Solicitacao registrada.' };
+    default:
+      return { tom: 'neutro', mensagem: status };
+  }
+}

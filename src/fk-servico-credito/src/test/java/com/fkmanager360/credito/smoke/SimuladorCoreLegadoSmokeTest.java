@@ -1,8 +1,10 @@
 package com.fkmanager360.credito.smoke;
 
+import com.fkmanager360.credito.adapter.out.legacy.ConsultaStatusEfetivacaoAclAdapter;
 import com.fkmanager360.credito.adapter.out.legacy.CreditoLegadoAclAdapter;
 import com.fkmanager360.credito.adapter.out.legacy.EfetivacaoLegadoAclAdapter;
 import com.fkmanager360.credito.application.port.out.IntencaoEfetivacao;
+import com.fkmanager360.credito.application.port.out.ResultadoConsultaStatusCore;
 import com.fkmanager360.credito.application.port.out.ResultadoInstrucaoCore;
 import com.fkmanager360.credito.domain.ClassificacaoRiscoCreditoBase;
 import com.fkmanager360.credito.domain.ContaId;
@@ -12,6 +14,7 @@ import com.fkmanager360.credito.domain.EfetivacaoId;
 import com.fkmanager360.credito.domain.LimiteChequeEspecialVigente;
 import com.fkmanager360.credito.domain.LimiteSolicitado;
 import com.fkmanager360.credito.domain.MotivoFalhaEfetivacao;
+import com.fkmanager360.credito.domain.ProtocoloCore;
 import com.fkmanager360.credito.domain.SituacaoConta;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -33,6 +36,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * S5: conjunto pequeno contra o simulador-core-legado real (nao mockado), construido a partir do
@@ -286,5 +290,143 @@ class SimuladorCoreLegadoSmokeTest {
         }
         assertThat(adapterContraOSimuladorReal().consultar(contaId).orElseThrow().limiteChequeEspecialVigente().centavos())
                 .isEqualTo(vigenteEsperadoCentavos);
+    }
+
+    // --- Consulta de status por protocolo e por EfetivacaoId (#0006, S5) -----------------------
+
+    private ConsultaStatusEfetivacaoAclAdapter adapterConsultaStatusContraOSimuladorReal() {
+        var requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
+
+        RestClient restClient = RestClient.builder()
+                .baseUrl(baseUrlDoSimulador())
+                .requestFactory(requestFactory)
+                .build();
+
+        return new ConsultaStatusEfetivacaoAclAdapter(restClient);
+    }
+
+    @Test
+    void consultaStatus_porEfetivacaoId_emProcessamentoDepoisProcessada_comLimiteEfetivado() {
+        // Conta 10001: vigente real 500000 centavos no simulador (nao usada por outro teste desta suite).
+        IntencaoEfetivacao intencao = intencao("10001", 500_000, 550_000);
+        EfetivacaoId efetivacaoId = intencao.efetivacaoId();
+
+        ResultadoInstrucaoCore aceite = adapterEfetivacaoContraOSimuladorReal().entregar(intencao);
+        assertThat(aceite).isInstanceOf(ResultadoInstrucaoCore.Aceite.class);
+
+        ResultadoConsultaStatusCore statusInicial = adapterConsultaStatusContraOSimuladorReal().consultarPorEfetivacaoId(efetivacaoId);
+        assertThat(statusInicial).isInstanceOf(ResultadoConsultaStatusCore.EmProcessamento.class);
+
+        ResultadoConsultaStatusCore statusFinal = pollarStatusAteProcessada(
+                () -> adapterConsultaStatusContraOSimuladorReal().consultarPorEfetivacaoId(efetivacaoId));
+        assertThat(statusFinal).isEqualTo(new ResultadoConsultaStatusCore.Efetivada(
+                ((ResultadoInstrucaoCore.Aceite) aceite).protocoloCore(), 550_000L));
+    }
+
+    @Test
+    void consultaStatus_porProtocolo_devolveOMesmoDesfechoQuePorEfetivacaoId() {
+        // Conta 10002 ja e usada por outro teste desta suite para dedupe -- uma nova aqui evita
+        // interferencia (o dedupe e por idEft, nao por conta, mas o vigente real de cada conta e
+        // fixo, entao reusar valida o mesmo dataset).
+        IntencaoEfetivacao intencao = intencao("10002", 120_000, 140_000);
+
+        ResultadoInstrucaoCore aceite = adapterEfetivacaoContraOSimuladorReal().entregar(intencao);
+        ProtocoloCore protocolo = ((ResultadoInstrucaoCore.Aceite) aceite).protocoloCore();
+
+        ResultadoConsultaStatusCore statusFinal = pollarStatusAteProcessada(
+                () -> adapterConsultaStatusContraOSimuladorReal().consultarPorProtocolo(protocolo));
+        assertThat(statusFinal).isEqualTo(new ResultadoConsultaStatusCore.Efetivada(protocolo, 140_000L));
+    }
+
+    @Test
+    void consultaStatus_efetivacaoIdDesconhecido_devolveDesconhecida() {
+        ResultadoConsultaStatusCore status =
+                adapterConsultaStatusContraOSimuladorReal().consultarPorEfetivacaoId(new EfetivacaoId(UUID.randomUUID()));
+
+        assertThat(status).isInstanceOf(ResultadoConsultaStatusCore.Desconhecida.class);
+    }
+
+    @Test
+    void consultaStatus_protocoloDesconhecido_devolveDesconhecida() {
+        ResultadoConsultaStatusCore status =
+                adapterConsultaStatusContraOSimuladorReal().consultarPorProtocolo(new ProtocoloCore("999999999999"));
+
+        assertThat(status).isInstanceOf(ResultadoConsultaStatusCore.Desconhecida.class);
+    }
+
+    /** Poll curto sem {@code Thread.sleep} de duracao fixa -- mesmo espirito de {@code expect.poll} no e2e. */
+    private ResultadoConsultaStatusCore pollarStatusAteProcessada(java.util.function.Supplier<ResultadoConsultaStatusCore> consulta) {
+        Instant limite = Instant.now().plusSeconds(5);
+        ResultadoConsultaStatusCore ultimo;
+        do {
+            ultimo = consulta.get();
+            if (ultimo instanceof ResultadoConsultaStatusCore.Efetivada) {
+                return ultimo;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        } while (Instant.now().isBefore(limite));
+        return ultimo;
+    }
+
+    // --- Control plane de callback (#0006, S5): suprimir e suspender ----------------------------
+
+    @Test
+    void suprimirCallback_processaNormalmenteEConsultaDeStatusReflete_disparoUnico() {
+        // Conta 20001 (carteira B, vigente real 450000): nao usada por outro teste desta suite.
+        controlPlaneRestClient().post().uri("/control-plane/efetivacoes/0000020001/suprimir-callback")
+                .retrieve().toBodilessEntity();
+        IntencaoEfetivacao intencao = intencao("20001", 450_000, 500_000);
+
+        ResultadoInstrucaoCore aceite = adapterEfetivacaoContraOSimuladorReal().entregar(intencao);
+        assertThat(aceite).isInstanceOf(ResultadoInstrucaoCore.Aceite.class);
+
+        // O processamento acontece normalmente (limite muda, desfecho registrado) mesmo com o
+        // callback suprimido -- e exatamente essa convergencia que a reconciliacao explora (AC12).
+        ResultadoConsultaStatusCore statusFinal = pollarStatusAteProcessada(
+                () -> adapterConsultaStatusContraOSimuladorReal().consultarPorEfetivacaoId(intencao.efetivacaoId()));
+        assertThat(statusFinal).isEqualTo(new ResultadoConsultaStatusCore.Efetivada(
+                ((ResultadoInstrucaoCore.Aceite) aceite).protocoloCore(), 500_000L));
+    }
+
+    @Test
+    void suspenderProcessamento_permaneceEmProcessamentoAteLiberar_entaoProcessaEEfetiva() throws InterruptedException {
+        controlPlaneRestClient().post().uri("/control-plane/efetivacoes/0000020002/suspender-processamento")
+                .retrieve().toBodilessEntity();
+
+        // Conta 20002: vigente real 600000 centavos no simulador.
+        IntencaoEfetivacao intencao = intencao("20002", 600_000, 650_000);
+        ResultadoInstrucaoCore aceite = adapterEfetivacaoContraOSimuladorReal().entregar(intencao);
+        assertThat(aceite).isInstanceOf(ResultadoInstrucaoCore.Aceite.class);
+
+        // Aguarda alem do atraso normal de processamento (~0.5s) e confirma que NADA processou --
+        // suspenso de verdade, nao so atrasado.
+        Thread.sleep(1500);
+        ResultadoConsultaStatusCore statusSuspenso =
+                adapterConsultaStatusContraOSimuladorReal().consultarPorEfetivacaoId(intencao.efetivacaoId());
+        assertThat(statusSuspenso).isInstanceOf(ResultadoConsultaStatusCore.EmProcessamento.class);
+
+        controlPlaneRestClient().post().uri("/control-plane/efetivacoes/0000020002/liberar")
+                .retrieve().toBodilessEntity();
+
+        ResultadoConsultaStatusCore statusFinal = pollarStatusAteProcessada(
+                () -> adapterConsultaStatusContraOSimuladorReal().consultarPorEfetivacaoId(intencao.efetivacaoId()));
+        assertThat(statusFinal).isEqualTo(new ResultadoConsultaStatusCore.Efetivada(
+                ((ResultadoInstrucaoCore.Aceite) aceite).protocoloCore(), 650_000L));
+    }
+
+    @Test
+    void liberarProcessamento_semPendenciaSuspensa_e404() {
+        assertThatThrownBy(() -> controlPlaneRestClient().post().uri("/control-plane/efetivacoes/0000010001/liberar")
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOfSatisfying(org.springframework.web.client.HttpClientErrorException.class,
+                        e -> assertThat(e.getStatusCode().value()).isEqualTo(404));
     }
 }

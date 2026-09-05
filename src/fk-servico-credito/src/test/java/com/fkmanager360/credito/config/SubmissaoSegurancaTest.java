@@ -6,6 +6,7 @@ import com.fkmanager360.credito.application.port.out.CargaParaDecisao;
 import com.fkmanager360.credito.application.port.out.EntregasEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.IdempotenciaEmProcessamentoException;
 import com.fkmanager360.credito.application.port.out.NovaSolicitacaoAumentoLimite;
+import com.fkmanager360.credito.application.port.out.ReconciliacaoEfetivacaoPort;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotencia;
 import com.fkmanager360.credito.application.port.out.RegistroIdempotenciaPort;
 import com.fkmanager360.credito.application.port.out.ResultadoAplicacaoDecisao;
@@ -103,7 +104,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "spring.flyway.enabled=false",
                 "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
                         + "org.springframework.boot.jdbc.autoconfigure.health.DataSourceHealthContributorAutoConfiguration",
-                "credito.efetivacao.entrega.habilitada=false"
+                "credito.efetivacao.entrega.habilitada=false",
+                "credito.efetivacao.reconciliacao.habilitada=false"
         })
 @AutoConfigureMockMvc
 @Import(JwtDecoderTestConfig.class)
@@ -178,6 +180,10 @@ class SubmissaoSegurancaTest {
 
     @MockitoBean
     private ResultadoEfetivacaoPort resultadoEfetivacaoPort;
+
+    // #0006: mesma razao das portas acima.
+    @MockitoBean
+    private ReconciliacaoEfetivacaoPort reconciliacaoEfetivacaoPort;
 
     /** Preenchido pelo stub padrao de {@code registrar(...)}, reaproveitado por quem precisar do contexto congelado. */
     private final AtomicReference<ContextoDecisaoCredito> contextoCapturado = new AtomicReference<>();

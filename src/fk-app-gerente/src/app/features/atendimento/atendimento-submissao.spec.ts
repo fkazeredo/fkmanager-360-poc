@@ -113,7 +113,10 @@ describe('AtendimentoComponent -- submissao de aumento de limite', () => {
     expect(el.querySelector('.decisao.rejeitada')).toBeNull();
     expect(el.querySelector('.limite-vigente-confirmado')?.textContent).toContain('1.200,00');
     expect(el.querySelector('.limite-pendente')?.textContent).toContain('2.000,00');
-    expect(el.querySelector('.status-solicitacao')?.textContent).toContain('AGUARDANDO_EFETIVACAO');
+    // #0006, AC37: o enum cru nao e mais renderizado -- apresentacaoDeStatus traduz para o tom e
+    // a mensagem apropriados (testado exaustivamente em mensagens.spec.ts).
+    expect(el.querySelector('.status-solicitacao')?.textContent).toContain('Aguardando confirmacao do Core');
+    expect(el.querySelector('.status-tom-acompanhamento')).toBeTruthy();
   });
 
   it('submissao rejeitada por FORA_DA_POLITICA_AUTOMATICA: sem marcacao de pendente, mensagem exata da politica', async () => {
